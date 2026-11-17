@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r backend/requirements-dev.txt
+      - run: python -m pytest
+        working-directory: backend
+
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r backend/requirements.txt
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+        working-directory: app
+      - run: flutter analyze
+        working-directory: app
+      - name: Widget tests + contract tests against the real engine
+        run: flutter test
+        working-directory: app
+        env:
+          UATA_BACKEND_DIR: ${{ github.workspace }}/backend
+
+  windows-build:
+    runs-on: windows-latest
+    needs: [backend, flutter]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: ./scripts/build_windows.ps1
+        shell: pwsh
+      - name: Smoke-test the bundled engine
+        shell: pwsh
+        run: |
+          $env:UATA_DATA_DIR = "$env:RUNNER_TEMP\uata"
+          $p = Start-Process -PassThru -FilePath "app\build\windows\x64\runner\Release\engine\uata-engine.exe"
+          Start-Sleep -Seconds 8
+          $r = Invoke-RestMethod http://127.0.0.1:8765/health
+          if (-not $r.ok) { throw "engine health check failed" }
+          Stop-Process -Id $p.Id
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uata-windows
+          path: app/build/windows/x64/runner/Release/

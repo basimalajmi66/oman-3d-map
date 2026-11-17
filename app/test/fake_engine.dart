@@ -1,0 +1,255 @@
+import 'package:uata_app/core/engine_api.dart';
+import 'package:uata_app/core/window_controller.dart';
+
+/// In-memory engine used by widget tests. Behaves like the real engine for the
+/// rules the UI depends on (WAIT without engine, permission gate, approval gate).
+class FakeEngine implements EngineApi {
+  bool online = true;
+  Json settings = {
+    'candle_timeframe_sec': 30,
+    'trade_duration_min_sec': 60,
+    'trade_duration_max_sec': 180,
+    'trading_mode': 'manual',
+    'continuous_analysis': false,
+    'min_confidence_to_signal': 0.65,
+    'min_data_quality_to_signal': 0.6,
+    'min_confluence_factors': 3,
+    'signal_cooldown_sec': 30,
+    'indicators': {for (final n in ['rsi', 'macd', 'trend']) n: true},
+    'language': 'ar',
+    'theme': 'system',
+    'panel_always_on_top': true,
+    'panel_opacity': 0.95,
+    'screen_capture_allowed': false,
+    'external_data_sources_allowed': false,
+  };
+  Json? session;
+  bool halted = false;
+  final List<Json> sources = [];
+  final List<Json> results = [];
+  final List<Json> signals = [];
+  final List<String> calls = [];
+  int _id = 0;
+
+  void _check() {
+    if (!online) throw EngineException(0, 'offline');
+  }
+
+  @override
+  Future<bool> health() async => online;
+
+  @override
+  Future<Json> getSettings() async {
+    _check();
+    return Map.of(settings);
+  }
+
+  @override
+  Future<Json> patchSettings(Json patch) async {
+    _check();
+    calls.add('patch:${patch.keys.join(',')}');
+    if (patch['trading_mode'] != null && patch['trading_mode'] != 'manual') {
+      throw EngineException(422, 'manual only');
+    }
+    if (patch['indicators'] is Map) {
+      patch = {...patch, 'indicators': {...settings['indicators'] as Map, ...patch['indicators'] as Map}};
+    }
+    settings = {...settings, ...patch};
+    return Map.of(settings);
+  }
+
+  @override
+  Future<Json> resetSettings() async => getSettings();
+
+  @override
+  Future<Json> status() async {
+    _check();
+    final reason = halted ? 'emergency_stop_active' : session == null ? 'analysis_not_running' : 'analysis_engine_not_installed';
+    return {
+      'state': halted ? 'halted' : session == null ? 'idle' : 'running_no_engine',
+      'halted': halted,
+      'session': session,
+      'engine_available': false,
+      'components': {'chart_vision': false, 'signal_engine': false},
+      'recommendation': {'signal': 'WAIT', 'reason_code': reason, 'confidence': null, 'duration_sec': null},
+    };
+  }
+
+  @override
+  Future<Json> start({String inputMode = 'upload', String? asset}) async {
+    _check();
+    calls.add('start:$inputMode');
+    if (inputMode.contains('screen') && settings['screen_capture_allowed'] != true) {
+      throw EngineException(403, 'permission');
+    }
+    halted = false;
+    session = {'id': ++_id, 'timeframe_sec': settings['candle_timeframe_sec'], 'input_mode': inputMode};
+    return status();
+  }
+
+  @override
+  Future<Json> stop() async {
+    calls.add('stop');
+    session = null;
+    return status();
+  }
+
+  @override
+  Future<Json> emergencyStop() async {
+    calls.add('emergency');
+    session = null;
+    halted = true;
+    settings = {...settings, 'screen_capture_allowed': false, 'continuous_analysis': false};
+    return status();
+  }
+
+  // ---------------------------------------------------------------- knowledge
+  @override
+  Future<List<Json>> listSources({String? kind, String? category}) async {
+    _check();
+    return sources.reversed
+        .map((s) => {
+              ...s,
+              'pending_count': (s['items'] as List).where((i) => (i as Map)['status'] == 'pending_review').length,
+            })
+        .toList();
+  }
+
+  @override
+  Future<Json> getSource(int id) async => sources.firstWhere((s) => s['id'] == id);
+
+  @override
+  Future<void> deleteSource(int id) async => sources.removeWhere((s) => s['id'] == id);
+
+  Json _newSource(String kind, String title, {String? content, String? category, String status = 'done'}) {
+    final id = ++_id;
+    final s = <String, dynamic>{
+      'id': id,
+      'kind': kind,
+      'title': title,
+      'category': category,
+      'tags': <String>[],
+      'created_at': '2026-11-17T10:00:00.000+00:00',
+      'extraction_status': status,
+      'items': [
+        if (content != null)
+          {'id': ++_id, 'source_id': id, 'item_type': 'note', 'title': title, 'content': content, 'status': 'pending_review'}
+      ],
+    };
+    sources.add(s);
+    return s;
+  }
+
+  @override
+  Future<Json> addNote(
+      {required String title, required String content, String? category, List<String> tags = const [], String itemType = 'note'}) async {
+    calls.add('note:$title');
+    return _newSource('note', title, content: content, category: category);
+  }
+
+  @override
+  Future<Json> addUrl({required String url, String? title, String? notes}) async =>
+      _newSource('url', title ?? url, status: 'unsupported_yet');
+
+  @override
+  Future<Json> uploadFile(UploadFile file, {String? title, String? category, List<String> tags = const []}) async {
+    calls.add('upload:${file.name}');
+    if (sources.any((s) => s['title'] == file.name)) throw EngineException(409, 'dup');
+    return _newSource(file.name.endsWith('.txt') ? 'txt' : 'pdf', file.name,
+        status: file.name.endsWith('.txt') ? 'done' : 'unsupported_yet');
+  }
+
+  @override
+  Future<Json> decideItem(int itemId, String decision) async {
+    calls.add('$decision:$itemId');
+    for (final s in sources) {
+      for (final i in (s['items'] as List).cast<Map>()) {
+        if (i['id'] == itemId) {
+          i['status'] = decision == 'approve' ? 'approved' : 'rejected';
+          return i.cast<String, dynamic>();
+        }
+      }
+    }
+    throw EngineException(404, 'nf');
+  }
+
+  @override
+  Future<List<Json>> search(String query, {bool approvedOnly = false}) async => [
+        for (final s in sources)
+          for (final i in (s['items'] as List).cast<Map>())
+            if ((i['content'] as String).contains(query))
+              {...i.cast<String, dynamic>(), 'source_title': s['title'], 'snippet': i['content']}
+      ];
+
+  // ---------------------------------------------------------------- records
+  @override
+  Future<List<Json>> listSignals({int limit = 100}) async => signals;
+
+  @override
+  Future<Json> summary() async => {
+        'signals': {'total': signals.length, 'BUY': 0, 'SELL': 0, 'WAIT': signals.length},
+        'results_by_account': {
+          for (final a in ['simulation', 'demo', 'real'])
+            a: {
+              'total': results.where((r) => r['account_type'] == a).length,
+              'wins': results.where((r) => r['account_type'] == a && r['outcome'] == 'win').length,
+              'losses': results.where((r) => r['account_type'] == a && r['outcome'] == 'loss').length,
+              'win_rate': null,
+              'sample_size': results.where((r) => r['account_type'] == a).length,
+            }
+        },
+      };
+
+  @override
+  Future<List<Json>> listResults({String? accountType}) async => results;
+
+  @override
+  Future<Json> addResult(Json result) async {
+    final r = {...result, 'id': ++_id};
+    results.add(r);
+    return r;
+  }
+
+  @override
+  Future<void> deleteResult(int id) async => results.removeWhere((r) => r['id'] == id);
+
+  // ---------------------------------------------------------------- backup
+  final List<Json> backups = [];
+
+  @override
+  Future<List<Json>> listBackups() async => backups;
+
+  @override
+  Future<Json> createBackup(String passphrase) async {
+    calls.add('backup');
+    final b = {'name': 'uata-backup-${backups.length}.uatabak', 'size_bytes': 1234};
+    backups.add(b);
+    return b;
+  }
+
+  @override
+  Future<Json> restoreBackup(UploadFile file, String passphrase) async => {'restored': true};
+
+  @override
+  Future<void> wipe({bool includeBackups = false}) async {
+    calls.add('wipe:$includeBackups');
+    sources.clear();
+    results.clear();
+  }
+}
+
+class FakeWindow implements WindowController {
+  final List<String> calls = [];
+  @override
+  bool get isDesktop => false;
+  @override
+  Future<void> setExpanded(bool expanded) async => calls.add('expanded:$expanded');
+  @override
+  Future<void> setAlwaysOnTop(bool value) async {}
+  @override
+  Future<void> setOpacity(double value) async {}
+  @override
+  Future<void> minimize() async {}
+  @override
+  Future<void> close() async {}
+}

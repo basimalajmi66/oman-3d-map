@@ -1,0 +1,7 @@
+fastapi>=0.115
+uvicorn>=0.30
+pydantic>=2.7
+python-multipart>=0.0.9
+cryptography>=42
+numpy>=1.26
+opencv-python-headless>=4.9

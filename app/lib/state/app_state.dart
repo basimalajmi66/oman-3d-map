@@ -1,0 +1,141 @@
+import 'dart:async';
+
+import 'package:material_ui/material_ui.dart';
+
+import '../core/engine_api.dart';
+import '../core/window_controller.dart';
+import '../l10n/strings.dart';
+
+/// Single source of UI state. Settings live in the engine's SQLite database so
+/// they survive restarts and travel inside backups.
+class AppState extends ChangeNotifier {
+  AppState({required this.engine, required this.window, this.pollInterval = const Duration(seconds: 2)});
+
+  final EngineApi engine;
+  final WindowController window;
+  final Duration? pollInterval; // null disables polling (tests)
+
+  bool connected = false;
+  bool busy = false;
+  String? lastError;
+  Json settings = {};
+  Json status = {};
+  Timer? _timer;
+
+  String get lang => (settings['language'] as String?) ?? 'ar';
+  String t(String key) => tr(lang, key);
+  bool get isRtl => lang == 'ar';
+
+  ThemeMode get themeMode => switch (settings['theme']) {
+        'dark' => ThemeMode.dark,
+        'light' => ThemeMode.light,
+        _ => ThemeMode.system,
+      };
+
+  String get state => connected ? (status['state'] as String? ?? 'idle') : 'offline';
+  bool get running => status['session'] != null;
+  Json get recommendation => (status['recommendation'] as Map?)?.cast<String, dynamic>() ?? const {};
+  String get signal => recommendation['signal'] as String? ?? 'WAIT';
+
+  Future<void> init() async {
+    await refresh();
+    if (pollInterval != null) {
+      _timer = Timer.periodic(pollInterval!, (_) => _poll());
+    }
+  }
+
+  Future<void> refresh() async {
+    try {
+      settings = await engine.getSettings();
+      status = await engine.status();
+      connected = true;
+      lastError = null;
+      await _applyWindowPrefs();
+    } on EngineException catch (e) {
+      connected = !e.isOffline;
+      lastError = e.message;
+    }
+    notifyListeners();
+  }
+
+  Future<void> _poll() async {
+    try {
+      final s = await engine.status();
+      final wasOffline = !connected;
+      status = s;
+      connected = true;
+      if (wasOffline) settings = await engine.getSettings();
+      notifyListeners();
+    } on EngineException catch (e) {
+      if (e.isOffline && connected) {
+        connected = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _applyWindowPrefs() async {
+    await window.setAlwaysOnTop(settings['panel_always_on_top'] as bool? ?? true);
+    await window.setOpacity((settings['panel_opacity'] as num?)?.toDouble() ?? 1.0);
+  }
+
+  Future<T?> _guard<T>(Future<T> Function() action) async {
+    busy = true;
+    notifyListeners();
+    try {
+      final r = await action();
+      lastError = null;
+      return r;
+    } on EngineException catch (e) {
+      lastError = e.message;
+      if (e.isOffline) connected = false;
+      rethrow;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> startAnalysis({String inputMode = 'upload'}) async {
+    status = (await _guard(() => engine.start(inputMode: inputMode)))!;
+  }
+
+  Future<void> stopAnalysis() async {
+    status = (await _guard(engine.stop))!;
+  }
+
+  Future<void> emergencyStop() async {
+    status = (await _guard(engine.emergencyStop))!;
+    settings = await engine.getSettings();
+    notifyListeners();
+  }
+
+  Future<void> updateSettings(Json patch) async {
+    settings = (await _guard(() => engine.patchSettings(patch)))!;
+    await _applyWindowPrefs();
+    notifyListeners();
+  }
+
+  Future<void> resetSettings() async {
+    settings = (await _guard(engine.resetSettings))!;
+    await _applyWindowPrefs();
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+}
+
+/// Exposes [AppState] to the widget tree and rebuilds dependents on change.
+class AppScope extends InheritedNotifier<AppState> {
+  const AppScope({super.key, required AppState state, required super.child}) : super(notifier: state);
+
+  static AppState of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
+
+  static AppState read(BuildContext context) =>
+      (context.getElementForInheritedWidgetOfExactType<AppScope>()!.widget as AppScope).notifier!;
+}

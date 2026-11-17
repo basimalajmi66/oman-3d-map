@@ -1,0 +1,12 @@
+[project]
+name = "uata-engine"
+version = "0.1.0"
+description = "Universal AI Trading Assistant - local analysis engine (Phase 1: core, storage, API)"
+requires-python = ">=3.11"
+
+[project.scripts]
+uata-engine = "uata.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
