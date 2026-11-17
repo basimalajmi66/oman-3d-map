@@ -196,3 +196,13 @@ def test_full_user_journey_on_the_real_engine(tmp_path):
     # what matters is that the shutdown hooks ran
     assert code in (0, -signal.SIGTERM), log[-2000:]
     assert "Application shutdown complete" in log
+
+
+def test_health_reports_capabilities(client):
+    caps = client.get("/health").json()["capabilities"]
+    assert set(caps) == {"ocr", "ocr_languages", "speech_to_text", "ffmpeg", "screen_capture"}
+    from uata.vision import axis
+    assert caps["ocr"] == axis.ocr_available()
+    if caps["ocr"]:
+        assert "eng" in caps["ocr_languages"] and "osd" not in caps["ocr_languages"]
+    assert caps["speech_to_text"] is False  # no local model is ever downloaded

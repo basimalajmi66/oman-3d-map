@@ -287,6 +287,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
           value: s['external_data_sources_allowed'] == true,
           onChanged: (v) => _set('external_data_sources_allowed', v),
         ),
+        _header('installation_section'),
+        for (final cap in ['ocr', 'speech_to_text', 'ffmpeg', 'screen_capture'])
+          ListTile(
+            key: Key('cap_$cap'),
+            dense: true,
+            leading: Icon(app.capabilities[cap] == true ? Icons.check_circle : Icons.remove_circle_outline,
+                color: app.capabilities[cap] == true ? SignalColors.buy : SignalColors.wait),
+            title: Text(app.t('cap_$cap')),
+            subtitle: cap == 'ocr' && app.capabilities['ocr_languages'] is List
+                ? Text((app.capabilities['ocr_languages'] as List).join(', '))
+                : null,
+          ),
+        ListTile(
+          dense: true,
+          title: Text(app.t('stt_model_path')),
+          subtitle: Text('${s['stt_model_path'] ?? '—'}'),
+          trailing: IconButton(
+            key: const Key('edit_stt_path'),
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () async {
+              final c = TextEditingController(text: s['stt_model_path'] as String? ?? '');
+              final v = await showDialog<String>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: Text(app.t('stt_model_path')),
+                  content: TextField(key: const Key('stt_path_field'), controller: c),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: Text(app.t('cancel'))),
+                    FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: Text(app.t('save'))),
+                  ],
+                ),
+              );
+              if (v != null) {
+                await _set('stt_model_path', v.isEmpty ? 'null' : v);
+                await app.refresh();
+              }
+            },
+          ),
+        ),
         _header('backup_section'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),

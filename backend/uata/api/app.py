@@ -256,7 +256,20 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
     @app.get("/health")
     def health() -> dict[str, Any]:
         return {"ok": True, "engine_version": ENGINE_VERSION, "api_version": API_VERSION,
-                "notices": svc.notices or []}
+                "notices": svc.notices or [], "capabilities": capabilities()}
+
+    def capabilities() -> dict[str, Any]:
+        """What this installation can actually do (shown in the UI and checked by the installer test)."""
+        from uata.video.transcript import FasterWhisperSTT, ffmpeg_exe
+        from uata.vision import axis
+        try:
+            import mss  # noqa: F401
+            screen = True
+        except ImportError:
+            screen = False
+        return {"ocr": axis.ocr_available(), "ocr_languages": axis.ocr_languages(),
+                "speech_to_text": FasterWhisperSTT(svc.settings.get().stt_model_path).available,
+                "ffmpeg": ffmpeg_exe() is not None, "screen_capture": screen}
 
     a = [Depends(auth)]
 

@@ -24,6 +24,7 @@ class AppState extends ChangeNotifier {
   bool overlayActive = false;
   Json? lastChartResult;
   List<Json> notices = const [];
+  Json capabilities = const {};
 
   bool connected = false;
   bool busy = false;
@@ -59,6 +60,7 @@ class AppState extends ChangeNotifier {
       settings = await engine.getSettings();
       status = await engine.status();
       notices = await engine.notices();
+      capabilities = await engine.capabilities();
       connected = true;
       lastError = null;
       await _applyWindowPrefs();

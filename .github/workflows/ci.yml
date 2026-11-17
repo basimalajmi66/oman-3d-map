@@ -90,17 +90,39 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - run: ./scripts/build_windows.ps1
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Build app, engine, bundled Tesseract and installer
+        run: ./scripts/build_windows.ps1 -BundleTesseract -Installer
         shell: pwsh
-      - name: Smoke-test the bundled engine
+      - name: Install silently, run the installed engine, check OCR (ara+eng), uninstall
         shell: pwsh
         run: |
+          $setup = Get-ChildItem dist\UATA-Setup-*.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+          $app = "$env:LOCALAPPDATA\Programs\UATA"
+          if (-not (Test-Path "$app\uata_app.exe")) { throw "app not installed" }
+          if (-not (Test-Path "$app\engine\uata-engine.exe")) { throw "engine not installed" }
           $env:UATA_DATA_DIR = "$env:RUNNER_TEMP\uata"
-          $p = Start-Process -PassThru -FilePath "app\build\windows\x64\runner\Release\engine\uata-engine.exe"
-          Start-Sleep -Seconds 8
-          $r = Invoke-RestMethod http://127.0.0.1:8765/health
-          if (-not $r.ok) { throw "engine health check failed" }
+          $p = Start-Process -PassThru -FilePath "$app\engine\uata-engine.exe"
+          $ok = $false
+          for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep -Seconds 1
+            try { $h = Invoke-RestMethod http://127.0.0.1:8765/health; $ok = $true; break } catch {}
+          }
+          if (-not $ok) { throw "installed engine did not start" }
+          $h.capabilities | ConvertTo-Json
+          if (-not $h.capabilities.ocr) { throw "bundled OCR not found by the installed engine" }
+          if ($h.capabilities.ocr_languages -notcontains "ara") { throw "Arabic OCR data missing" }
+          if (-not $h.capabilities.ffmpeg) { throw "bundled ffmpeg missing" }
           Stop-Process -Id $p.Id
+          Start-Process "$app\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES" -Wait
+          Start-Sleep -Seconds 3
+          if (Test-Path "$app\uata_app.exe") { throw "uninstall left the app behind" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uata-windows-installer
+          path: dist/UATA-Setup-*.exe
       - uses: actions/upload-artifact@v4
         with:
           name: uata-windows

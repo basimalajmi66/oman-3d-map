@@ -43,6 +43,10 @@ class FakeEngine implements EngineApi {
   List<Json> engineNotices = [];
   @override
   Future<List<Json>> notices() async => engineNotices;
+  Json engineCapabilities = {'ocr': true, 'ocr_languages': ['ara', 'eng'], 'speech_to_text': false,
+    'ffmpeg': true, 'screen_capture': true};
+  @override
+  Future<Json> capabilities() async => engineCapabilities;
 
   @override
   Future<Json> getSettings() async {

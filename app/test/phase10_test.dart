@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:uata_app/state/app_state.dart';
+import 'package:uata_app/l10n/strings.dart';
 import 'package:uata_app/ui/panel/floating_panel.dart';
+import 'package:uata_app/ui/screens/settings_screen.dart';
 
 import 'fake_engine.dart';
 
@@ -26,5 +28,26 @@ void main() {
     await tester.pumpWidget(AppScope(state: state, child: const MaterialApp(home: FloatingPanel())));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('notice_database_was_corrupt')), findsNothing);
+  });
+
+  testWidgets('settings show what this installation can do', (tester) async {
+    tester.view.physicalSize = const Size(1000, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final e = FakeEngine();
+    final state = AppState(engine: e, window: FakeWindow(), pollInterval: null);
+    await state.init();
+    await tester.pumpWidget(AppScope(state: state, child: const MaterialApp(home: SettingsScreen())));
+    await tester.pumpAndSettle();
+    expect(find.text(tr('ar', 'installation_section')), findsOneWidget);
+    expect(find.text('ara, eng'), findsOneWidget);
+    final stt = tester.widget<ListTile>(find.byKey(const Key('cap_speech_to_text')));
+    expect((stt.leading as Icon).icon, Icons.remove_circle_outline);
+    await tester.tap(find.byKey(const Key('edit_stt_path')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('stt_path_field')), 'C:/models/whisper-small');
+    await tester.tap(find.text(tr('ar', 'save')).last);
+    await tester.pumpAndSettle();
+    expect(e.settings['stt_model_path'], 'C:/models/whisper-small');
   });
 }

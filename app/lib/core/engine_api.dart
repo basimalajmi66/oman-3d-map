@@ -33,6 +33,8 @@ abstract class EngineApi {
   Future<bool> health();
   /// Engine notices from /health (e.g. it started after setting a corrupt database aside).
   Future<List<Json>> notices();
+  /// What this installation can do: OCR (+languages), speech-to-text, ffmpeg, screen capture.
+  Future<Json> capabilities();
 
   // settings
   Future<Json> getSettings();

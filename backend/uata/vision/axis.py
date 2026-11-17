@@ -25,10 +25,20 @@ TF_UNIT_SEC = {"s": 1, "sec": 1, "secs": 1, "m": 60, "min": 60, "mins": 60, "h":
                "d": 86400, "D": 86400, "w": 604800, "W": 604800}
 
 
+def _bundled_tesseract() -> str | None:
+    """Tesseract shipped by the Windows installer: <install>/tesseract/tesseract.exe next to <install>/engine/."""
+    import sys
+    from pathlib import Path
+    if not getattr(sys, "frozen", False):
+        return None
+    exe = Path(sys.executable).resolve().parent.parent / "tesseract" / "tesseract.exe"
+    return str(exe) if exe.is_file() else None
+
+
 def _locate_tesseract() -> str | None:
-    """PATH, then UATA_TESSERACT, then the default Windows installer location."""
+    """UATA_TESSERACT, the copy bundled by the installer, PATH, then the default Windows install folders."""
     import os
-    for cand in (os.environ.get("UATA_TESSERACT"), shutil.which("tesseract"),
+    for cand in (os.environ.get("UATA_TESSERACT"), _bundled_tesseract(), shutil.which("tesseract"),
                  r"C:\Program Files\Tesseract-OCR\tesseract.exe",
                  r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"):
         if cand and os.path.isfile(cand):
@@ -43,6 +53,15 @@ if pytesseract is not None and _TESSERACT:
 
 def ocr_available() -> bool:
     return pytesseract is not None and _TESSERACT is not None
+
+
+def ocr_languages() -> list[str]:
+    if not ocr_available():
+        return []
+    try:
+        return sorted(l_ for l_ in pytesseract.get_languages(config="") if l_ != "osd")
+    except Exception:  # nosec B110 - a broken tessdata folder simply means "no languages"
+        return []
 
 
 @dataclass

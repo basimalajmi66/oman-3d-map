@@ -523,6 +523,12 @@ const Map<String, Map<String, String>> _strings = {
     'ar': 'تعذرت قراءة قاعدة البيانات عند التشغيل؛ حُفظت كما هي باسم {kept_as} وبدأ النظام بقاعدة جديدة. استعد آخر نسخة احتياطية من الإعدادات.',
     'en': 'The database could not be read at start-up; it was kept as {kept_as} and a fresh one was started. Restore your latest backup from Settings.'
   },
+  'installation_section': {'ar': 'هذه النسخة المثبتة', 'en': 'This installation'},
+  'cap_ocr': {'ar': 'قراءة النصوص والأسعار (OCR)', 'en': 'Text & price reading (OCR)'},
+  'cap_speech_to_text': {'ar': 'تحويل الكلام إلى نص (نموذج محلي)', 'en': 'Speech-to-text (local model)'},
+  'cap_ffmpeg': {'ar': 'معالجة الصوت والفيديو (FFmpeg)', 'en': 'Audio/video processing (FFmpeg)'},
+  'cap_screen_capture': {'ar': 'التقاط الشاشة', 'en': 'Screen capture'},
+  'stt_model_path': {'ar': 'مسار نموذج تحويل الكلام (اختياري)', 'en': 'Speech-to-text model folder (optional)'},
   // indicator names
   'ind_price_action': {'ar': 'حركة السعر', 'en': 'Price action'},
   'ind_candlesticks': {'ar': 'الشموع اليابانية', 'en': 'Japanese candlesticks'},
