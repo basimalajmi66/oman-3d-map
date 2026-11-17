@@ -131,3 +131,17 @@ def degrade(img: np.ndarray, *, jpeg_quality: int | None = None, noise_sigma: fl
         ok, buf = cv2.imencode(".jpg", out, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
         out = cv2.imdecode(buf, cv2.IMREAD_COLOR)
     return out
+
+
+def uptrend_ohlc(n: int = 80, seed: int = 3) -> list[tuple]:
+    """A clear uptrend whose last closed candle is bullish (test fixture for the decision engine)."""
+    rng = np.random.default_rng(seed)
+    rows, p = [], 1.1
+    for i in range(n):
+        o = p
+        c = o + abs(rng.normal(0.0006, 0.0004)) if i % 5 else o - 0.0003
+        rows.append((o, max(o, c) + 0.0003, min(o, c) - 0.0003, c))
+        p = c
+    o = rows[-2][0]
+    rows[-2] = (o, max(rows[-2][1], o + 0.0008), rows[-2][2], o + 0.0007)
+    return rows

@@ -222,9 +222,8 @@ void main() {
     final chart = File(p.join(dataDir.path, 'up_chart.png'));
     final gen = await Process.run('python3', [
       '-c',
-      'import cv2,sys; sys.path.insert(0,"tests"); from test_signal import uptrend_rows; '
-          'from uata.vision.synthetic import render_chart; '
-          'cv2.imwrite(sys.argv[1], render_chart(uptrend_rows(), style="dark_tv").image)',
+      'import cv2,sys; from uata.vision.synthetic import render_chart, uptrend_ohlc; '
+          'cv2.imwrite(sys.argv[1], render_chart(uptrend_ohlc(), style="dark_tv").image)',
       chart.path,
     ], workingDirectory: backend);
     expect(gen.exitCode, 0, reason: '${gen.stderr}');

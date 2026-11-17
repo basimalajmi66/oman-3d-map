@@ -10,23 +10,14 @@ from uata.analysis.engine import analyze_reading
 from uata.core.settings_model import Settings
 from uata.signal.engine import decide, fingerprint
 from uata.vision.reader import ChartReader
-from uata.vision.synthetic import render_chart
+from uata.vision.synthetic import render_chart, uptrend_ohlc
 
 ALWAYS_UP = {"id": "momentum_up", "atr": -100}      # always true: isolates the engine logic from the market
 ALWAYS_DOWN = {"id": "momentum_down", "atr": -100}
 
 
 def uptrend_rows(n=80, seed=3):
-    rng = np.random.default_rng(seed)
-    rows, p = [], 1.1
-    for i in range(n):
-        o = p
-        c = o + abs(rng.normal(0.0006, 0.0004)) if i % 5 else o - 0.0003
-        rows.append((o, max(o, c) + 0.0003, min(o, c) - 0.0003, c))
-        p = c
-    o = rows[-2][0]
-    rows[-2] = (o, max(rows[-2][1], o + 0.0008), rows[-2][2], o + 0.0007)  # last closed candle bullish
-    return rows
+    return uptrend_ohlc(n, seed)
 
 
 @pytest.fixture(scope="module")
