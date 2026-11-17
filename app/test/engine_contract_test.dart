@@ -5,6 +5,7 @@
 library;
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -97,8 +98,60 @@ void main() {
     expect(await api.listSources(), isNotEmpty);
   }, skip: skip);
 
+  test('chart image: real PNG decoded by the engine, honest WAIT, permission gate', () async {
+    await api.start(); // clears the emergency stop from the earlier test
+    final bytes = _png(160, 90);
+    UploadFile up(String name) => UploadFile(name: name, length: bytes.length, openRead: () => Stream.value(bytes));
+    final r = await api.submitChartImage(up('chart.png'), inputMode: 'share');
+    expect((r['input'] as Map)['width'], 160);
+    expect((r['input'] as Map)['height'], 90);
+    expect((r['analysis'] as Map)['signal'], 'WAIT');
+    expect((r['analysis'] as Map)['data_basis'], 'image_only');
+    expect(await api.listChartInputs(), hasLength(1));
+    await expectLater(api.submitChartImage(up('s.png'), inputMode: 'screenshot'),
+        throwsA(predicate((e) => e is EngineException && e.isPermission)));
+    final junk = 'not an image'.codeUnits;
+    await expectLater(
+        api.submitChartImage(UploadFile(name: 'x.png', length: junk.length, openRead: () => Stream.value(junk))),
+        throwsA(predicate((e) => e is EngineException && e.statusCode == 422)));
+  }, skip: skip);
+
   test('token is required', () async {
     final bad = HttpEngineApi(baseUrl: api.baseUrl, tokenProvider: () async => 'wrong');
     await expectLater(bad.getSettings(), throwsA(predicate((e) => e is EngineException && e.statusCode == 401)));
   }, skip: skip);
+}
+
+/// Minimal valid RGB PNG (solid colour) built with dart:io zlib — no extra packages.
+Uint8List _png(int w, int h) {
+  int crc(List<int> data) {
+    var c = 0xffffffff;
+    for (final b in data) {
+      c ^= b;
+      for (var k = 0; k < 8; k++) {
+        c = (c & 1) != 0 ? 0xedb88320 ^ (c >> 1) : c >> 1;
+      }
+    }
+    return c ^ 0xffffffff;
+  }
+
+  List<int> u32(int v) => [(v >> 24) & 255, (v >> 16) & 255, (v >> 8) & 255, v & 255];
+  List<int> chunk(String type, List<int> data) {
+    final td = [...type.codeUnits, ...data];
+    return [...u32(data.length), ...td, ...u32(crc(td))];
+  }
+
+  final raw = <int>[];
+  for (var y = 0; y < h; y++) {
+    raw.add(0);
+    for (var x = 0; x < w; x++) {
+      raw.addAll([20, x < w ~/ 2 ? 180 : 40, 60]);
+    }
+  }
+  return Uint8List.fromList([
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, //
+    ...chunk('IHDR', [...u32(w), ...u32(h), 8, 2, 0, 0, 0]),
+    ...chunk('IDAT', ZLibCodec().encode(raw)),
+    ...chunk('IEND', const []),
+  ]);
 }

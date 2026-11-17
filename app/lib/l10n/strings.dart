@@ -191,6 +191,23 @@ const Map<String, Map<String, String>> _strings = {
   'saved': {'ar': 'تم الحفظ', 'en': 'Saved'},
   'error': {'ar': 'خطأ', 'en': 'Error'},
   'trading_mode': {'ar': 'أسلوب التداول: يدوي (ثابت)', 'en': 'Trading mode: manual (fixed)'},
+  // phase 2: chart images, share sheet, Android overlay, tablet
+  'analyze_image': {'ar': 'تحليل صورة شارت', 'en': 'Analyze chart image'},
+  'chart_result': {'ar': 'نتيجة تحليل الصورة', 'en': 'Chart image result'},
+  'image_size': {'ar': 'أبعاد الصورة', 'en': 'Image size'},
+  'image_only': {'ar': 'الصورة فقط (بدون بيانات أسعار حقيقية)', 'en': 'Image only (no real price data)'},
+  'panel': {'ar': 'اللوحة', 'en': 'Panel'},
+  'overlay_show': {'ar': 'إظهار النافذة العائمة', 'en': 'Show floating window'},
+  'overlay_hide': {'ar': 'إخفاء النافذة العائمة', 'en': 'Hide floating window'},
+  'overlay_permission_denied': {
+    'ar': 'لم يُمنح إذن "الظهور فوق التطبيقات". يمكنك منحه من إعدادات أندرويد.',
+    'en': '"Display over other apps" was not granted. You can grant it in Android settings.'
+  },
+  'share_chart': {'ar': 'تم استلام صورة شارت', 'en': 'Chart image received'},
+  'share_library': {'ar': 'أضيف إلى المكتبة بانتظار موافقتك', 'en': 'Added to the library, awaiting your approval'},
+  'share_duplicate': {'ar': 'الملف موجود مسبقاً في المكتبة', 'en': 'Already in the library'},
+  'share_unsupported': {'ar': 'نوع ملف غير مدعوم', 'en': 'Unsupported file type'},
+  'share_failed': {'ar': 'تعذرت معالجة الملف', 'en': 'Could not process the file'},
   // indicator names
   'ind_price_action': {'ar': 'حركة السعر', 'en': 'Price action'},
   'ind_candlesticks': {'ar': 'الشموع اليابانية', 'en': 'Japanese candlesticks'},

@@ -1,7 +1,9 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/engine_api.dart';
 import '../../state/app_state.dart';
+import '../screens/chart_result.dart';
 import '../screens/knowledge_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/signal_details.dart';
@@ -12,15 +14,45 @@ import '../theme.dart';
 /// The compact floating panel: current recommendation, status and controls.
 /// BUY / SELL / WAIT tiles *display* the recommendation and open its details;
 /// they never place an order.
-class FloatingPanel extends StatelessWidget {
-  const FloatingPanel({super.key});
+enum PanelDestination { library, training, log, settings }
 
-  Future<void> _open(BuildContext context, Widget screen) async {
+Widget screenFor(PanelDestination d) => switch (d) {
+      PanelDestination.library => const KnowledgeScreen(),
+      PanelDestination.training => const TrainingScreen(),
+      PanelDestination.log => const SignalLogScreen(),
+      PanelDestination.settings => const SettingsScreen(),
+    };
+
+class FloatingPanel extends StatelessWidget {
+  const FloatingPanel({super.key, this.onNavigate, this.pickImage = pickChartImage});
+
+  /// When set (tablet shell), navigation selects a pane instead of pushing a route.
+  final void Function(PanelDestination)? onNavigate;
+  final FilePickFn pickImage;
+
+  Future<void> _go(BuildContext context, PanelDestination d) async {
+    if (onNavigate != null) return onNavigate!(d);
     final app = AppScope.read(context);
     await app.window.setExpanded(true);
     if (!context.mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screenFor(d)));
     await app.window.setExpanded(false);
+  }
+
+  Future<void> _analyzeImage(BuildContext context) async {
+    final app = AppScope.read(context);
+    final img = await pickImage();
+    if (img == null || !context.mounted) return;
+    Json? result;
+    final ok = await runWithFeedback(context, () async => result = await app.analyzeChart(img));
+    if (ok && result != null && context.mounted) await showChartResult(context, result!);
+  }
+
+  Future<void> _toggleOverlay(BuildContext context) async {
+    final app = AppScope.read(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final ok = await app.toggleOverlay();
+    if (!ok) messenger?.showSnackBar(SnackBar(content: Text(app.t('overlay_permission_denied'))));
   }
 
   @override
@@ -47,6 +79,27 @@ class FloatingPanel extends StatelessWidget {
                       _StatusLine(app: app),
                       const SizedBox(height: 10),
                       _Controls(app: app),
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            key: const Key('btn_analyze_image'),
+                            onPressed: app.connected && !app.busy ? () => _analyzeImage(context) : null,
+                            icon: const Icon(Icons.image_search),
+                            label: Text(app.t('analyze_image'), overflow: TextOverflow.ellipsis),
+                          ),
+                        ),
+                        if (app.overlay.supported) ...[
+                          const SizedBox(width: 6),
+                          IconButton.outlined(
+                            key: const Key('btn_overlay'),
+                            tooltip: app.t(app.overlayActive ? 'overlay_hide' : 'overlay_show'),
+                            isSelected: app.overlayActive,
+                            onPressed: app.connected ? () => _toggleOverlay(context) : null,
+                            icon: const Icon(Icons.picture_in_picture_alt_outlined),
+                          ),
+                        ],
+                      ]),
                       const SizedBox(height: 10),
                       Wrap(
                         alignment: WrapAlignment.spaceBetween,
@@ -57,22 +110,22 @@ class FloatingPanel extends StatelessWidget {
                               key: const Key('nav_library'),
                               icon: Icons.menu_book_outlined,
                               label: app.t('library'),
-                              onTap: app.connected ? () => _open(context, const KnowledgeScreen()) : null),
+                              onTap: app.connected ? () => _go(context, PanelDestination.library) : null),
                           _NavButton(
                               key: const Key('nav_training'),
                               icon: Icons.school_outlined,
                               label: app.t('training'),
-                              onTap: app.connected ? () => _open(context, const TrainingScreen()) : null),
+                              onTap: app.connected ? () => _go(context, PanelDestination.training) : null),
                           _NavButton(
                               key: const Key('nav_log'),
                               icon: Icons.receipt_long_outlined,
                               label: app.t('log'),
-                              onTap: app.connected ? () => _open(context, const SignalLogScreen()) : null),
+                              onTap: app.connected ? () => _go(context, PanelDestination.log) : null),
                           _NavButton(
                               key: const Key('nav_settings'),
                               icon: Icons.settings_outlined,
                               label: app.t('settings'),
-                              onTap: app.connected ? () => _open(context, const SettingsScreen()) : null),
+                              onTap: app.connected ? () => _go(context, PanelDestination.settings) : null),
                         ],
                       ),
                       const SizedBox(height: 10),

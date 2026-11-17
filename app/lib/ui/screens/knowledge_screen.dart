@@ -21,6 +21,12 @@ Future<UploadFile?> pickDeviceFile() async {
   return UploadFile(name: f.name, length: len, openRead: f.readAsByteStream);
 }
 
+Future<UploadFile?> pickChartImage() async {
+  final f = await FilePicker.pickFile(type: FileType.image);
+  if (f == null) return null;
+  return UploadFile(name: f.name, length: await f.length() ?? 0, openRead: f.readAsByteStream);
+}
+
 /// Knowledge library: add / search / categorise / delete sources and approve
 /// or reject the knowledge extracted from them.
 class KnowledgeScreen extends StatefulWidget {

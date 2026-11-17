@@ -15,7 +15,8 @@
 ```
 ┌──────────────────────────── Flutter UI (Windows / Android / Tablet / iOS) ───────────────────────────┐
 │  FloatingPanel  │ KnowledgeScreen │ SignalLogScreen │ TrainingScreen │ SettingsScreen                 │
-│        └──────────── AppState (ChangeNotifier) ──── EngineApi (interface) ──────────┐                 │
+│  AdaptiveHome (هاتف/تابلت/كمبيوتر) · OverlayApp (Android) · ShareIntake             │                 │
+│        └──────────── AppState (ChangeNotifier) ──── EngineApi ◄── EngineHost ───────┐                 │
 │  WindowController (window_manager: frameless, always-on-top, resizable)            │                 │
 └────────────────────────────────────────────────────────────────────────────────────┼─────────────────┘
                                          HTTP على 127.0.0.1 + X-UATA-Token           │
@@ -27,6 +28,8 @@
 │   knowledge_service  المصادر، العناصر، الموافقة، الروابط، بحث FTS5          [المرحلة 1 ✔]             │
 │   records_service    سجل الإشارات (بقواعد إلزامية) + يوميات النتائج         [المرحلة 1 ✔]             │
 │   backup_service     نسخ مشفر AES-256-GCM + استعادة + حذف شامل              [المرحلة 1 ✔]             │
+│   chart_input_service استقبال صور الشارت والتحقق منها بـ OpenCV            [المرحلة 2 ✔]             │
+│ android_entry.py     تشغيل المحرك داخل تطبيق Android (Chaquopy)            [المرحلة 2 ✔]             │
 │   vision/            قراءة الشارت بـ OpenCV + OCR                           [المرحلة 3]               │
 │   analysis/          الشموع والمؤشرات وحركة السعر                          [المرحلة 4]               │
 │   rag/               استخراج PDF/DOCX/XLSX + embeddings + بحث متجهي محلي    [المرحلة 5]               │
@@ -47,7 +50,7 @@
 | النظام | طريقة التشغيل | ملاحظات |
 |---|---|---|
 | Windows | `engine\uata-engine.exe` (PyInstaller) بجانب التطبيق، يشغّله `EngineLocator` تلقائياً | مُتحقق منه: الملف التنفيذي يُبنى ويعمل. |
-| Android | Python مضمّن عبر **Chaquopy** يشغّل نفس الحزمة `uata` داخل التطبيق | المرحلة 2. يدعم numpy وOpenCV. النافذة العائمة عبر `SYSTEM_ALERT_WINDOW`، والالتقاط عبر `MediaProjection` بإذن صريح. |
+| Android | Python مضمّن عبر **Chaquopy 17.2** يشغّل نفس الحزمة `uata`؛ `MainActivity.kt` يبدؤه عبر قناة `uata/engine` في `filesDir/uata` | المرحلة 2 (مكتوب، يُبنى في CI). النافذة العائمة عبر `flutter_overlay_window` بإذن `SYSTEM_ALERT_WINDOW`؛ استقبال المشاركة عبر `receive_sharing_intent`؛ HTTP غير المشفر مسموح لـ 127.0.0.1 فقط؛ `allowBackup=false`. الالتقاط المستمر بـ MediaProjection في المرحلة 3. |
 | Tablet | نفس تطبيق Android بتخطيط متكيف (الشاشات العريضة تعرض قائمة + تفاصيل) | التخطيط المتكيف موجود منذ المرحلة 1. |
 | iOS | تطبيق مرافق: تحليل صور/ملفات ومشاركة الشارت عبر Share Extension. المحرك إما مضمّن (Python-for-iOS) أو الاتصال بمحرك الكمبيوتر على الشبكة المحلية بعد اقتران صريح | iOS لا يسمح بنوافذ عائمة فوق التطبيقات ولا بالتقاط شاشة تطبيقات أخرى. |
 

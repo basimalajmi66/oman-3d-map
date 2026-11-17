@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, ValidationError
 from uata.config import API_VERSION, ENGINE_VERSION, Paths, _restrict_permissions
 from uata.db.database import Database
 from uata.services.backup_service import BackupError, BackupService
+from uata.services.chart_input_service import ChartInputService, InvalidImage
 from uata.services.control_service import ControlService, PermissionRequired
 from uata.services.knowledge_service import Duplicate, KnowledgeService, NotFound
 from uata.services.records_service import RecordsService
@@ -44,6 +45,7 @@ class Services:
     knowledge: KnowledgeService
     records: RecordsService
     backup: BackupService
+    chart_inputs: ChartInputService
 
 
 def build_services(paths: Paths) -> Services:
@@ -52,7 +54,8 @@ def build_services(paths: Paths) -> Services:
     db.migrate()
     _restrict_permissions(paths.db_file, 0o600)
     return Services(paths, db, SettingsService(db), ControlService(db),
-                    KnowledgeService(db, paths.files_dir), RecordsService(db), BackupService(db, paths))
+                    KnowledgeService(db, paths.files_dir), RecordsService(db), BackupService(db, paths),
+                    ChartInputService(db, paths.files_dir))
 
 
 # ---------------------------------------------------------------- request bodies
@@ -179,6 +182,39 @@ def create_app(paths: Paths, token: str | None = None) -> FastAPI:
         svc.control.stop(reason="emergency_stop", emergency=True)
         svc.settings.update({"continuous_analysis": False, "screen_capture_allowed": False})
         return svc.control.status()
+
+    # ------------------------------------------------------------ chart inputs
+    @app.post("/analysis/inputs", dependencies=a, status_code=201)
+    def submit_chart(file: UploadFile = File(...), input_mode: str = Form("upload")):
+        """Receive a chart image (upload / share / screenshot). Never trades."""
+        if svc.control.halted:
+            raise HTTPException(409, "emergency stop is active; start analysis again first")
+        session = svc.control.current_session()
+        try:
+            return svc.chart_inputs.submit(file.file, file.filename, input_mode,
+                                           svc.settings.get().screen_capture_allowed,
+                                           session["id"] if session else None)
+        except PermissionError as e:
+            raise HTTPException(403, str(e)) from None
+        except InvalidImage as e:
+            raise HTTPException(422, str(e)) from None
+
+    @app.get("/analysis/inputs", dependencies=a)
+    def list_chart_inputs(limit: int = Query(50, le=500)):
+        return svc.chart_inputs.list(limit)
+
+    @app.get("/analysis/inputs/{input_id}/image", dependencies=a)
+    def chart_image(input_id: int):
+        try:
+            return FileResponse(svc.chart_inputs.image_path(input_id), media_type="image/png")
+        except KeyError:
+            raise HTTPException(404, "input not found") from None
+
+    @app.delete("/analysis/inputs/{input_id}", dependencies=a)
+    def delete_chart_input(input_id: int):
+        if not svc.chart_inputs.delete(input_id):
+            raise HTTPException(404, "input not found")
+        return {"deleted": input_id}
 
     # ------------------------------------------------------------ knowledge
     @app.get("/knowledge/sources", dependencies=a)

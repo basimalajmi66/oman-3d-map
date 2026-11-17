@@ -41,6 +41,11 @@ abstract class EngineApi {
   Future<Json> stop();
   Future<Json> emergencyStop();
 
+  // chart images for analysis (upload / share / screenshot)
+  /// [inputMode]: 'upload', 'share', 'screenshot' or 'screen_region'.
+  Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload'});
+  Future<List<Json>> listChartInputs({int limit = 50});
+
   // knowledge library
   Future<List<Json>> listSources({String? kind, String? category});
   Future<Json> getSource(int id);

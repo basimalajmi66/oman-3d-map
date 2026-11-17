@@ -1,0 +1,9 @@
+# Packages installed by Chaquopy into the Android app (see app/android/app/build.gradle.kts).
+# Versions are limited to what Chaquopy publishes for Android ABIs; CI verifies the build.
+fastapi
+uvicorn
+pydantic
+python-multipart
+cryptography
+numpy
+opencv-python

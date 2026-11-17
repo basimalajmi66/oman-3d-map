@@ -5,15 +5,24 @@ import 'package:material_ui/material_ui.dart';
 import '../core/engine_api.dart';
 import '../core/window_controller.dart';
 import '../l10n/strings.dart';
+import '../platform/android_overlay.dart';
 
 /// Single source of UI state. Settings live in the engine's SQLite database so
 /// they survive restarts and travel inside backups.
 class AppState extends ChangeNotifier {
-  AppState({required this.engine, required this.window, this.pollInterval = const Duration(seconds: 2)});
+  AppState({
+    required this.engine,
+    required this.window,
+    this.pollInterval = const Duration(seconds: 2),
+    OverlayController? overlay,
+  }) : overlay = overlay ?? NoOverlay();
 
   final EngineApi engine;
   final WindowController window;
   final Duration? pollInterval; // null disables polling (tests)
+  final OverlayController overlay;
+  bool overlayActive = false;
+  Json? lastChartResult;
 
   bool connected = false;
   bool busy = false;
@@ -51,6 +60,8 @@ class AppState extends ChangeNotifier {
       connected = true;
       lastError = null;
       await _applyWindowPrefs();
+      overlayActive = await overlay.isActive();
+      await _pushOverlay();
     } on EngineException catch (e) {
       connected = !e.isOffline;
       lastError = e.message;
@@ -65,6 +76,7 @@ class AppState extends ChangeNotifier {
       status = s;
       connected = true;
       if (wasOffline) settings = await engine.getSettings();
+      await _pushOverlay();
       notifyListeners();
     } on EngineException catch (e) {
       if (e.isOffline && connected) {
@@ -72,6 +84,42 @@ class AppState extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  Future<void> _pushOverlay() async {
+    if (!overlayActive) return;
+    await overlay.push(overlayPayload(
+      lang: lang,
+      state: state,
+      recommendation: recommendation,
+      timeframe: (status['session'] as Map?)?['timeframe_sec'] ?? settings['candle_timeframe_sec'],
+    ));
+  }
+
+  /// Show / hide the Android floating window. Asks for the overlay permission
+  /// first; returns false when the user did not grant it.
+  Future<bool> toggleOverlay() async {
+    if (!overlay.supported) return false;
+    if (overlayActive) {
+      await overlay.hide();
+      overlayActive = false;
+      notifyListeners();
+      return true;
+    }
+    if (!await overlay.hasPermission() && !await overlay.requestPermission()) return false;
+    await overlay.show();
+    overlayActive = true;
+    await _pushOverlay();
+    notifyListeners();
+    return true;
+  }
+
+  /// Submit a chart image for analysis (upload, share or screenshot).
+  Future<Json> analyzeChart(UploadFile image, {String inputMode = 'upload'}) async {
+    final r = (await _guard(() => engine.submitChartImage(image, inputMode: inputMode)))!;
+    lastChartResult = r;
+    notifyListeners();
+    return r;
   }
 
   Future<void> _applyWindowPrefs() async {
@@ -98,15 +146,18 @@ class AppState extends ChangeNotifier {
 
   Future<void> startAnalysis({String inputMode = 'upload'}) async {
     status = (await _guard(() => engine.start(inputMode: inputMode)))!;
+    await _pushOverlay();
   }
 
   Future<void> stopAnalysis() async {
     status = (await _guard(engine.stop))!;
+    await _pushOverlay();
   }
 
   Future<void> emergencyStop() async {
     status = (await _guard(engine.emergencyStop))!;
     settings = await engine.getSettings();
+    await _pushOverlay();
     notifyListeners();
   }
 

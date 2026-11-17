@@ -1,5 +1,6 @@
 import 'package:uata_app/core/engine_api.dart';
 import 'package:uata_app/core/window_controller.dart';
+import 'package:uata_app/platform/android_overlay.dart';
 
 /// In-memory engine used by widget tests. Behaves like the real engine for the
 /// rules the UI depends on (WAIT without engine, permission gate, approval gate).
@@ -102,6 +103,28 @@ class FakeEngine implements EngineApi {
     settings = {...settings, 'screen_capture_allowed': false, 'continuous_analysis': false};
     return status();
   }
+
+  // ---------------------------------------------------------------- chart inputs
+  final List<Json> chartInputs = [];
+
+  @override
+  Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload'}) async {
+    _check();
+    calls.add('chart:$inputMode:${image.name}');
+    if (halted) throw EngineException(409, 'halted');
+    if (!image.name.endsWith('.png') && !image.name.endsWith('.jpg')) throw EngineException(422, 'not an image');
+    final input = {'id': ++_id, 'input_mode': inputMode, 'width': 800, 'height': 450,
+      'created_at': '2026-11-17T10:00:00.000+00:00'};
+    chartInputs.add(input);
+    return {
+      'input': input,
+      'analysis': {'signal': 'WAIT', 'reason_code': 'analysis_engine_not_installed', 'data_basis': 'image_only',
+        'confidence': null},
+    };
+  }
+
+  @override
+  Future<List<Json>> listChartInputs({int limit = 50}) async => chartInputs.reversed.toList();
 
   // ---------------------------------------------------------------- knowledge
   @override
@@ -252,4 +275,25 @@ class FakeWindow implements WindowController {
   Future<void> minimize() async {}
   @override
   Future<void> close() async {}
+}
+
+class FakeOverlay implements OverlayController {
+  bool granted = false;
+  bool grantOnRequest = true;
+  bool active = false;
+  final List<Json> pushed = [];
+  @override
+  bool get supported => true;
+  @override
+  Future<bool> hasPermission() async => granted;
+  @override
+  Future<bool> requestPermission() async => granted = grantOnRequest;
+  @override
+  Future<bool> isActive() async => active;
+  @override
+  Future<void> show() async => active = true;
+  @override
+  Future<void> hide() async => active = false;
+  @override
+  Future<void> push(Json payload) async => pushed.add(payload);
 }

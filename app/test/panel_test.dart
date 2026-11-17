@@ -111,7 +111,8 @@ void main() {
   });
 
   testWidgets('library: add note, approve item, search', (tester) async {
-    final (e, _, _) = await pumpApp(tester, size: const Size(1000, 800));
+    // wide tablet: panel pinned + library in split (list + detail) mode
+    final (e, _, _) = await pumpApp(tester, size: const Size(1500, 900));
     await tester.tap(find.byKey(const Key('nav_library')));
     await tester.pumpAndSettle();
     expect(find.text(tr('ar', 'empty_library')), findsOneWidget);
@@ -172,7 +173,7 @@ void main() {
   });
 
   testWidgets('signal log: record a demo result', (tester) async {
-    final (e, _, _) = await pumpApp(tester, size: const Size(1000, 800));
+    final (e, _, _) = await pumpApp(tester);
     await tester.tap(find.byKey(const Key('nav_log')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('no_signals')), findsOneWidget);
