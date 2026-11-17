@@ -2,7 +2,6 @@ plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.chaquo.python")
 }
 
 android {
@@ -29,10 +28,6 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // ABIs for which Chaquopy publishes Python + numpy/OpenCV builds (phones, tablets, emulators)
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
     }
 
     buildTypes {
@@ -52,19 +47,4 @@ kotlin {
 
 flutter {
     source = "../.."
-}
-
-// The local engine runs inside the app: same Python package as on Windows (backend/uata).
-chaquopy {
-    defaultConfig {
-        version = "3.12"
-        pip {
-            install("-r", "../../../backend/requirements-android.txt")
-        }
-    }
-    sourceSets {
-        getByName("main") {
-            srcDir("../../../backend")
-        }
-    }
 }

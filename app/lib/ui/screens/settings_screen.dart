@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/engine_api.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
+import 'companion_section.dart';
 import 'knowledge_screen.dart' show FilePickFn, pickDeviceFile;
 
 const _timeframes = [5, 10, 15, 30, 60, 120, 180, 300, 900, 1800, 3600, 14400, 86400];
@@ -30,7 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadBackups());
+    if (!AppScope.read(context).isCompanion) WidgetsBinding.instance.addPostFrameCallback((_) => _loadBackups());
   }
 
   Future<void> _loadBackups() async {
@@ -194,12 +195,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Text(app.t(key), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
       );
 
+  /// On a phone the settings live on the computer; the phone shows the connection and can unpair.
+  Widget _companionSettings(AppState app) {
+    final c = app.companion!;
+    return Scaffold(
+      appBar: AppBar(title: Text(app.t('settings'))),
+      body: ListView(children: [
+        _header('companion_section'),
+        ListTile(
+          leading: Icon(app.connected ? Icons.link : Icons.link_off,
+              color: app.connected ? SignalColors.buy : SignalColors.sell),
+          title: Text(app.t(app.connected ? 'companion_connected' : 'companion_unreachable')),
+          subtitle: Text('${c.host}:${c.port}  ·  TLS'),
+        ),
+        ListTile(leading: const Icon(Icons.info_outline), title: Text(app.t('companion_settings_on_computer'))),
+        ListTile(leading: const Icon(Icons.pan_tool_outlined), title: Text(app.t('trading_mode')), subtitle: Text(app.t('manual_only'))),
+        ListTile(
+          key: const Key('btn_unpair'),
+          leading: const Icon(Icons.link_off, color: SignalColors.sell),
+          title: Text(app.t('companion_unpair')),
+          onTap: () async {
+            final ok = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: Text(app.t('companion_unpair')),
+                content: Text(app.t('companion_unpair_hint')),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(app.t('cancel'))),
+                  FilledButton(key: const Key('confirm_unpair'), onPressed: () => Navigator.pop(ctx, true), child: Text(app.t('companion_unpair'))),
+                ],
+              ),
+            );
+            if (ok == true) await app.onUnpair?.call();
+          },
+        ),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final s = app.settings;
     final indicators = (s['indicators'] as Map?)?.cast<String, dynamic>() ?? const {};
     final secs = app.t('seconds');
+    if (app.isCompanion) return _companionSettings(app);
     return Scaffold(
       appBar: AppBar(title: Text(app.t('settings'))),
       body: ListView(children: [
@@ -326,6 +366,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
         ),
+        _header('companion_section'),
+        const CompanionDevicesSection(),
         _header('backup_section'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),

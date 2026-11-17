@@ -70,6 +70,9 @@ class Settings(BaseModel):
     external_data_sources_allowed: bool = False
     # optional local speech-to-text model folder (faster-whisper / CTranslate2); never downloaded
     stt_model_path: str | None = None
+    # companion devices (phone / tablet) over the local network: off unless the user turns it on
+    companion_enabled: bool = False
+    companion_port: int = Field(default=8766, ge=1024, le=65535)
 
     @model_validator(mode="after")
     def _check(self) -> "Settings":

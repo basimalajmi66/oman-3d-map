@@ -52,9 +52,10 @@ class ShareOutcome {
 class ShareIntake {
   ShareIntake({required this.engine, required this.source, required this.onOutcomes});
 
-  final EngineApi engine;
+  /// Replaced when the phone is paired again (a new engine connection).
+  EngineApi engine;
   final ShareSource source;
-  final void Function(List<ShareOutcome>) onOutcomes;
+  void Function(List<ShareOutcome>) onOutcomes;
   StreamSubscription<List<SharedItem>>? _sub;
 
   Future<void> start() async {

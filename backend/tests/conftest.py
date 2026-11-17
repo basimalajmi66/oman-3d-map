@@ -48,6 +48,7 @@ def app(paths, capturer):
     # stop background work so it cannot leak CPU into later tests
     svc = application.state.services
     svc.watcher.stop()
+    svc.companion.stop()
     for sid in list(svc.videos._queue) + ([svc.videos._running] if svc.videos._running else []):
         svc.videos.wait(sid, 120)
 

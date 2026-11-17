@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:uata_app/core/engine_api.dart';
-import 'package:uata_app/core/engine_host.dart';
 import 'package:uata_app/l10n/strings.dart';
 import 'package:uata_app/main.dart';
 import 'package:uata_app/platform/share_intake.dart';
@@ -181,36 +179,6 @@ void main() {
       await intake.process([SharedItem(file('book.pdf'))]);
       final second = await intake.process([SharedItem(file('book.pdf'))]);
       expect(second.single.kind, ShareOutcomeKind.duplicate);
-    });
-  });
-
-  group('embedded engine host', () {
-    TestWidgetsFlutterBinding.ensureInitialized();
-    const channel = MethodChannel('uata/engine');
-
-    test('starts engine over the method channel and reads the token from its data dir', () async {
-      final dir = Directory.systemTemp.createTempSync('uata_embedded');
-      File('${dir.path}/api_token').writeAsStringSync('tok123\n');
-      MethodCall? seen;
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
-        seen = call;
-        return {'port': 8799, 'data_dir': dir.path};
-      });
-      final host = EmbeddedEngineHost();
-      final api = await host.connect();
-      expect(seen!.method, 'start');
-      expect((seen!.arguments as Map)['port'], 8765);
-      expect(host.dataDir, dir.path);
-      expect(api, isA<EngineApi>());
-      dir.deleteSync(recursive: true);
-    });
-
-    test('native start failure becomes an offline EngineException', () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
-        throw PlatformException(code: 'PY', message: 'python missing');
-      });
-      await expectLater(EmbeddedEngineHost().connect(),
-          throwsA(predicate((e) => e is EngineException && e.isOffline && e.message.contains('python missing'))));
     });
   });
 }

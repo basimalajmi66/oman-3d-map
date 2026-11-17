@@ -12,12 +12,15 @@ class HttpEngineApi implements EngineApi {
     required this.tokenProvider,
     http.Client? client,
     this.timeout = const Duration(seconds: 15),
+    this.authHeader = 'X-UATA-Token',
   })  : baseUrl = baseUrl ?? Uri.parse('http://127.0.0.1:8765'),
         _client = client ?? http.Client();
 
   final Uri baseUrl;
   final Future<String?> Function() tokenProvider;
   final Duration timeout;
+  /// `X-UATA-Token` for the engine on this computer, `X-UATA-Device` for a paired phone.
+  final String authHeader;
   final http.Client _client;
   String? _token;
 
@@ -32,7 +35,7 @@ class HttpEngineApi implements EngineApi {
   Future<Map<String, String>> _headers({bool json = false}) async {
     _token ??= await tokenProvider();
     return {
-      'X-UATA-Token': ?_token,
+      authHeader: ?_token,
       if (json) 'content-type': 'application/json',
     };
   }
@@ -88,6 +91,15 @@ class HttpEngineApi implements EngineApi {
       return false;
     }
   }
+
+  @override
+  Future<Json> companionStatus() async => _map(await _get('/companion'));
+  @override
+  Future<Json> companionPairing() async => _map(await _post('/companion/pairing'));
+  @override
+  Future<void> cancelCompanionPairing() async => _delete('/companion/pairing');
+  @override
+  Future<Json> revokeCompanionDevice(int id) async => _map(await _delete('/companion/devices/$id'));
 
   @override
   Future<Json> capabilities() async {

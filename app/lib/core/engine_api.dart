@@ -36,6 +36,13 @@ abstract class EngineApi {
   /// What this installation can do: OCR (+languages), speech-to-text, ffmpeg, screen capture.
   Future<Json> capabilities();
 
+  // companion devices (desktop UI only; refused from a phone)
+  Future<Json> companionStatus();
+  /// One-time pairing code + `uata://pair?...` link for the QR code (valid 5 minutes).
+  Future<Json> companionPairing();
+  Future<void> cancelCompanionPairing();
+  Future<Json> revokeCompanionDevice(int id);
+
   // settings
   Future<Json> getSettings();
   Future<Json> patchSettings(Json patch);

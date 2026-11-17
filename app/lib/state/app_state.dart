@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 
+import '../core/companion.dart';
 import '../core/engine_api.dart';
 import '../core/window_controller.dart';
 import '../l10n/strings.dart';
@@ -15,7 +16,14 @@ class AppState extends ChangeNotifier {
     required this.window,
     this.pollInterval = const Duration(seconds: 2),
     OverlayController? overlay,
+    this.companion,
+    this.onUnpair,
   }) : overlay = overlay ?? NoOverlay();
+
+  /// Set on a phone / tablet: the engine is on this paired computer.
+  final CompanionPairing? companion;
+  final Future<void> Function()? onUnpair;
+  bool get isCompanion => companion != null;
 
   final EngineApi engine;
   final WindowController window;

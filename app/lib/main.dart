@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 
+import 'core/companion.dart';
 import 'core/engine_api.dart';
 import 'core/engine_host.dart';
 import 'core/http_engine_api.dart';
@@ -12,6 +14,7 @@ import 'state/app_state.dart';
 import 'ui/home/adaptive_home.dart';
 import 'ui/overlay/overlay_app.dart';
 import 'ui/screens/chart_result.dart';
+import 'ui/screens/pairing_screen.dart';
 import 'ui/theme.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -19,8 +22,31 @@ final messengerKey = GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await startApp();
+}
+
+/// Builds the app. On a phone / tablet without a pairing, the pairing screen comes first;
+/// unpairing calls this again, so the user is back at the pairing screen.
+Future<void> startApp() async {
   final window = await WindowController.create();
-  final host = EngineHost.forPlatform();
+  CompanionPairing? pairing;
+  EngineHost host;
+  if (EngineHost.isCompanionPlatform) {
+    pairing = await CompanionStore.load();
+    if (pairing == null) {
+      final done = Completer<CompanionPairing>();
+      runApp(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(Brightness.light),
+        darkTheme: buildTheme(Brightness.dark),
+        home: PairingScreen(onPaired: done.complete),
+      ));
+      pairing = await done.future;
+    }
+    host = RemoteEngineHost(pairing);
+  } else {
+    host = DesktopEngineHost();
+  }
   EngineApi engine;
   try {
     engine = await host.connect();
@@ -28,19 +54,34 @@ Future<void> main() async {
     // Engine failed to start: keep a client so the UI shows "offline" + retry.
     engine = HttpEngineApi(tokenProvider: () async => null);
   }
-  final state = AppState(
+  late final AppState state;
+  state = AppState(
     engine: engine,
     window: window,
     overlay: Platform.isAndroid ? AndroidOverlayController() : NoOverlay(),
+    companion: pairing,
+    onUnpair: () async {
+      await CompanionStore.clear();
+      state.dispose();
+      await startApp();
+    },
   );
   await state.init();
   runApp(UataApp(state: state));
 
-  if (Platform.isAndroid || Platform.isIOS) {
-    await ShareIntake(engine: engine, source: ReceiveSharingIntentSource(), onOutcomes: (o) => _reportShares(state, o))
-        .start();
+  if (EngineHost.isCompanionPlatform) {
+    if (_share case final share?) {
+      share
+        ..engine = engine
+        ..onOutcomes = (o) => _reportShares(state, o);
+    } else {
+      _share = ShareIntake(engine: engine, source: ReceiveSharingIntentSource(), onOutcomes: (o) => _reportShares(state, o));
+      await _share!.start();
+    }
   }
 }
+
+ShareIntake? _share;
 
 /// Entry point of the Android floating window (separate Flutter engine).
 @pragma('vm:entry-point')

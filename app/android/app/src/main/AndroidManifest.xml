@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Loopback socket to the embedded engine (127.0.0.1 only, see network_security_config) -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- scanning the pairing QR code shown on the computer -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <!-- Floating window over other apps: granted explicitly by the user in system settings -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

@@ -9,6 +9,7 @@ import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+import 'package:uata_app/core/companion.dart';
 import 'package:uata_app/core/engine_api.dart';
 import 'package:uata_app/core/engine_locator.dart';
 import 'package:uata_app/core/http_engine_api.dart';
@@ -257,6 +258,41 @@ void main() {
     final bad = HttpEngineApi(baseUrl: api.baseUrl, tokenProvider: () async => 'wrong');
     await expectLater(bad.getSettings(), throwsA(predicate((e) => e is EngineException && e.statusCode == 401)));
   }, skip: skip);
+
+  test('companion: TLS pinning, one-time pairing, allow-list (phone ↔ real engine)', () async {
+    expect((await api.companionStatus())['running'], false); // off by default
+    await api.patchSettings({'companion_enabled': true, 'companion_port': 8792});
+    final st = await api.companionStatus();
+    expect(st['running'], true, reason: '${st['error']}');
+    final pairing = await api.companionPairing();
+    final link = PairingLink.tryParse(pairing['uri'] as String)!;
+    final local = PairingLink(host: '127.0.0.1', port: link.port, fingerprint: link.fingerprint, code: link.code);
+
+    // a different fingerprint (someone else's certificate) is refused before anything is sent
+    final wrong = PairingLink(host: '127.0.0.1', port: link.port, fingerprint: 'ab' * 32, code: link.code);
+    await expectLater(pairWithComputer(wrong, 'evil'), throwsA(isA<EngineException>()));
+
+    final paired = await pairWithComputer(local, 'Contract phone');
+    await expectLater(pairWithComputer(local, 'again'), // the code is one-time
+        throwsA(predicate((e) => e is EngineException && e.statusCode == 401)));
+
+    final phone = await RemoteEngineHost(paired).connect();
+    expect(await phone.health(), true);
+    expect((await phone.status())['state'], isNotNull);
+    expect((await phone.getSettings())['trading_mode'], 'manual');
+    // dangerous operations are refused from the phone
+    await expectLater(phone.patchSettings({'language': 'ar'}),
+        throwsA(predicate((e) => e is EngineException && e.statusCode == 403)));
+    await expectLater(phone.listBackups(), throwsA(predicate((e) => e is EngineException && e.statusCode == 403)));
+    await expectLater(phone.companionStatus(), throwsA(predicate((e) => e is EngineException && e.statusCode == 403)));
+
+    final devices = ((await api.companionStatus())['devices'] as List).cast<Map>();
+    expect(devices.single['name'], 'Contract phone');
+    await api.revokeCompanionDevice(devices.single['id'] as int);
+    await expectLater(phone.status(), throwsA(predicate((e) => e is EngineException && e.statusCode == 401)));
+    await api.patchSettings({'companion_enabled': false});
+    expect((await api.companionStatus())['running'], false);
+  }, skip: skip);
 }
 
 /// Minimal valid RGB PNG (solid colour) built with dart:io zlib — no extra packages.
@@ -291,4 +327,5 @@ Uint8List _png(int w, int h) {
     ...chunk('IDAT', ZLibCodec().encode(raw)),
     ...chunk('IEND', const []),
   ]);
+
 }

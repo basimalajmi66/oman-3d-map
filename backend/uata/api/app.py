@@ -37,6 +37,7 @@ from uata.services.stats_service import StatsService
 from uata.services import strategy_service as strat
 from uata.video.transcript import FasterWhisperSTT
 from uata.vision.capture import CaptureUnavailable, Capturer, MssCapturer
+from uata.services.companion_service import CompanionService
 from uata.services.control_service import ControlService, PermissionRequired
 from uata.services.knowledge_service import Duplicate, KnowledgeService, NotFound
 from uata.services.records_service import RecordsService
@@ -61,6 +62,7 @@ class Services:
     signals: SignalService
     stats: StatsService
     notices: list | None = None
+    companion: CompanionService | None = None
 
 
 def _recover_corrupt_db(paths: Paths) -> list[dict]:
@@ -98,6 +100,7 @@ def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
                     knowledge, records, BackupService(db, paths),
                     chart_inputs, watcher, videos, strategies, signals, StatsService(db))
     services.notices = notices
+    services.companion = CompanionService(db, paths.root / "companion")
     if notices:
         with db.session() as conn:
             audit(conn, "system", "startup.recovered", **notices[0])
@@ -223,7 +226,9 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
 
     @asynccontextmanager
     async def lifespan(_app):
+        sync_companion()
         yield
+        svc.companion.stop()
         # graceful shutdown: stop reading the screen and let a running video job finish
         svc.control.stop(reason="engine_shutdown")
         svc.watcher.stop()
@@ -273,6 +278,14 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
 
     a = [Depends(auth)]
 
+    def sync_companion() -> None:
+        """Open / close the LAN listener to match the setting (off by default)."""
+        st = svc.settings.get()
+        if st.companion_enabled:
+            svc.companion.start(app, token, st.companion_port)
+        else:
+            svc.companion.stop()
+
     # ------------------------------------------------------------ settings
     @app.get("/settings", dependencies=a)
     def get_settings():
@@ -283,11 +296,34 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
         updated = svc.settings.update(patch)
         if not updated.screen_capture_allowed and svc.watcher.active:
             svc.watcher.stop()  # permission revoked: stop reading the screen at once
+        if {"companion_enabled", "companion_port"} & set(patch):
+            sync_companion()
         return updated.model_dump()
 
     @app.post("/settings/reset", dependencies=a)
     def reset_settings():
-        return svc.settings.reset().model_dump()
+        s = svc.settings.reset()
+        sync_companion()
+        return s.model_dump()
+
+    # ------------------------------------------------------------ companion devices (local UI only)
+    @app.get("/companion", dependencies=a)
+    def companion_status():
+        return svc.companion.status(svc.settings.get().companion_enabled)
+
+    @app.post("/companion/pairing", dependencies=a)
+    def companion_pairing():
+        return svc.companion.new_pairing()
+
+    @app.delete("/companion/pairing", dependencies=a)
+    def companion_cancel_pairing():
+        svc.companion.cancel_pairing()
+        return {"ok": True}
+
+    @app.delete("/companion/devices/{device_id}", dependencies=a)
+    def companion_revoke(device_id: int):
+        svc.companion.revoke(device_id)
+        return svc.companion.status(svc.settings.get().companion_enabled)
 
     # ------------------------------------------------------------ analysis control
     @app.get("/analysis/status", dependencies=a)
@@ -680,6 +716,7 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
         if body.confirm != WIPE_CONFIRMATION:
             raise HTTPException(400, f"confirmation text must be exactly: {WIPE_CONFIRMATION}")
         svc.control.stop(reason="wipe", emergency=True)
+        svc.companion.forget_certificate()  # paired devices are gone with the database
         svc.backup.wipe_all(body.include_backups)
         return {"wiped": True}
 

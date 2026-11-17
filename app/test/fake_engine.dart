@@ -48,6 +48,33 @@ class FakeEngine implements EngineApi {
   @override
   Future<Json> capabilities() async => engineCapabilities;
 
+  List<Json> companionDevices = [];
+  int pairingsCreated = 0;
+  Json _companion() => {
+        'enabled': settings['companion_enabled'] == true,
+        'running': settings['companion_enabled'] == true,
+        'port': 8766, 'error': null, 'fingerprint': 'ab' * 32,
+        'addresses': ['192.168.1.20'], 'pairing_active': false, 'devices': companionDevices,
+      };
+  @override
+  Future<Json> companionStatus() async => _companion();
+  @override
+  Future<Json> companionPairing() async {
+    pairingsCreated++;
+    return {'uri': 'uata://pair?h=192.168.1.20&p=8766&fp=${'ab' * 32}&c=CODE123', 'code': 'CODE123',
+      'host': '192.168.1.20', 'addresses': ['192.168.1.20'], 'port': 8766, 'fingerprint': 'ab' * 32,
+      'expires_in_sec': 300};
+  }
+  @override
+  Future<void> cancelCompanionPairing() async {}
+  @override
+  Future<Json> revokeCompanionDevice(int id) async {
+    for (final d in companionDevices) {
+      if (d['id'] == id) d['revoked_at'] = 'now';
+    }
+    return _companion();
+  }
+
   @override
   Future<Json> getSettings() async {
     _check();
