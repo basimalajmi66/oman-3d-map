@@ -7,7 +7,8 @@ plugins {
 
 android {
     namespace = "com.uata.uata_app"
-    compileSdk = flutter.compileSdkVersion
+    // receive_sharing_intent requires compileSdk 37
+    compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -49,6 +49,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # Chaquopy runs pip on the build machine with the same Python version it embeds
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
