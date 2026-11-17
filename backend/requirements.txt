@@ -5,3 +5,5 @@ python-multipart>=0.0.9
 cryptography>=42
 numpy>=1.26
 opencv-python-headless>=4.9
+pytesseract>=0.3.10
+mss>=9.0

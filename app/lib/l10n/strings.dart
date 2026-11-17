@@ -208,6 +208,63 @@ const Map<String, Map<String, String>> _strings = {
   'share_duplicate': {'ar': 'الملف موجود مسبقاً في المكتبة', 'en': 'Already in the library'},
   'share_unsupported': {'ar': 'نوع ملف غير مدعوم', 'en': 'Unsupported file type'},
   'share_failed': {'ar': 'تعذرت معالجة الملف', 'en': 'Could not process the file'},
+  // phase 3: chart reading
+  'capture_screen': {'ar': 'التقاط الشاشة', 'en': 'Capture screen'},
+  'reason_signal_engine_not_installed': {
+    'ar': 'تمت قراءة الشارت، لكن محرك الإشارات لم يُبنَ بعد (المرحلة 8)، لذلك تبقى التوصية انتظار.',
+    'en': 'The chart was read, but the signal engine is not built yet (Phase 8), so the recommendation stays WAIT.'
+  },
+  'reason_image_quality_insufficient': {
+    'ar': 'الصورة غير واضحة بما يكفي لقراءة موثوقة — امتنع النظام عن التحليل.',
+    'en': 'The image is not clear enough for a reliable reading — the system abstained.'
+  },
+  'reading': {'ar': 'ما قرأه النظام', 'en': 'What was read'},
+  'candles_detected': {'ar': 'الشموع المكتشفة', 'en': 'Candles detected'},
+  'closed_candles': {'ar': 'شموع مكتملة', 'en': 'Closed candles'},
+  'bull_bear': {'ar': 'صاعدة / هابطة', 'en': 'Bullish / bearish'},
+  'last_closed': {'ar': 'آخر شمعة مكتملة', 'en': 'Last closed candle'},
+  'forming_note': {
+    'ar': 'الشمعة الأخيرة تُعامل كأنها ما زالت تتكون ولا تدخل في التحليل.',
+    'en': 'The last candle is treated as still forming and is excluded from analysis.'
+  },
+  'up': {'ar': 'صاعدة', 'en': 'up'},
+  'down': {'ar': 'هابطة', 'en': 'down'},
+  'prices': {'ar': 'الأسعار', 'en': 'Prices'},
+  'prices_read': {'ar': 'مقروءة من محور السعر', 'en': 'read from the price axis'},
+  'prices_not_read': {
+    'ar': 'غير مقروءة — قيم نسبية فقط، لا أسعار مستنتجة',
+    'en': 'not readable — relative values only, no inferred prices'
+  },
+  'tf_detected': {'ar': 'الإطار الظاهر في الصورة', 'en': 'Timeframe shown in image'},
+  'tf_mismatch': {
+    'ar': 'تحذير: الإطار في الصورة يختلف عن إعداداتك',
+    'en': 'Warning: the image timeframe differs from your settings'
+  },
+  'abstain_reasons': {'ar': 'أسباب الامتناع', 'en': 'Reasons for abstaining'},
+  'show_detection': {'ar': 'عرض ما اكتشفه النظام على الصورة', 'en': 'Show detection on the image'},
+  'last_reading': {'ar': 'آخر قراءة للشاشة', 'en': 'Last screen reading'},
+  'capture_section': {'ar': 'قراءة الشاشة', 'en': 'Screen reading'},
+  'capture_interval': {'ar': 'تكرار القراءة المستمرة', 'en': 'Continuous reading interval'},
+  'capture_region': {'ar': 'منطقة القراءة', 'en': 'Capture region'},
+  'full_screen': {'ar': 'الشاشة كاملة', 'en': 'Full screen'},
+  'custom_region': {'ar': 'منطقة محددة', 'en': 'Custom region'},
+  'region_left': {'ar': 'يسار', 'en': 'Left'},
+  'region_top': {'ar': 'أعلى', 'en': 'Top'},
+  'region_width': {'ar': 'العرض', 'en': 'Width'},
+  'region_height': {'ar': 'الارتفاع', 'en': 'Height'},
+  'w_blurry': {'ar': 'الصورة ضبابية', 'en': 'image is blurry'},
+  'w_low_contrast': {'ar': 'تباين منخفض', 'en': 'low contrast'},
+  'w_low_resolution': {'ar': 'دقة منخفضة', 'en': 'low resolution'},
+  'w_missing_candle_slots': {'ar': 'شموع مفقودة في التسلسل', 'en': 'missing candles in the sequence'},
+  'w_bodies_not_resolved': {'ar': 'أجسام الشموع غير واضحة', 'en': 'candle bodies not resolved'},
+  'w_price_axis_not_read_relative_units_only': {'ar': 'محور السعر غير مقروء', 'en': 'price axis not readable'},
+  'w_ocr_not_installed_relative_units_only': {'ar': 'OCR غير مثبت', 'en': 'OCR not installed'},
+  'a_no_candles_found_or_unsupported_colours': {
+    'ar': 'لم تُكتشف شموع، أو ألوانها غير مدعومة (يُدعم الأخضر/الأحمر حالياً)',
+    'en': 'no candles found, or unsupported colours (green/red supported for now)'
+  },
+  'a_too_few_candles': {'ar': 'عدد الشموع أقل من 10', 'en': 'fewer than 10 candles'},
+  'a_image_quality_below_threshold': {'ar': 'الجودة أقل من الحد في الإعدادات', 'en': 'quality below your threshold'},
   // indicator names
   'ind_price_action': {'ar': 'حركة السعر', 'en': 'Price action'},
   'ind_candlesticks': {'ar': 'الشموع اليابانية', 'en': 'Japanese candlesticks'},

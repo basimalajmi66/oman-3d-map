@@ -29,7 +29,9 @@ def test_upload_image_returns_honest_wait(client, paths):
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["analysis"]["signal"] == "WAIT"
-    assert body["analysis"]["reason_code"] == "analysis_engine_not_installed"
+    # one green rectangle is not a readable chart: the reader abstains
+    assert body["analysis"]["reason_code"] == "image_quality_insufficient"
+    assert body["analysis"]["reading"]["usable"] is False
     assert body["analysis"]["data_basis"] == "image_only"
     assert body["analysis"]["confidence"] is None
     assert body["input"]["width"] == 320 and body["input"]["height"] == 200
@@ -107,3 +109,96 @@ def test_inputs_are_included_in_backup_and_wipe(client, paths, monkeypatch):
     assert client.get("/analysis/inputs").json() == []
     client.post("/backups/restore", files={"file": (name, io.BytesIO(raw))}, data={"passphrase": "long passphrase"})
     assert client.get(f"/analysis/inputs/{inp['id']}/image").status_code == 200
+
+
+# ---------------------------------------------------------------- Phase 3: reading + capture
+from uata.vision.synthetic import random_walk_ohlc, render_chart  # noqa: E402
+
+
+def chart_png(n=50, seed=9, **kw) -> bytes:
+    ok, buf = cv2.imencode(".png", render_chart(random_walk_ohlc(n, seed=seed), **kw).image)
+    return buf.tobytes()
+
+
+def test_real_chart_is_read_and_stored(client):
+    r = submit(client, chart_png(), name="eurusd.png", mode="share")
+    assert r.status_code == 201
+    a = r.json()["analysis"]
+    assert a["signal"] == "WAIT" and a["reason_code"] == "signal_engine_not_installed"
+    assert a["reading"]["usable"] is True and a["reading"]["candles"] == 50
+    assert a["reading"]["closed_candles"] == 49
+    iid = r.json()["input"]["id"]
+    full = client.get(f"/analysis/inputs/{iid}/reading").json()
+    assert len(full["candles"]) == 50 and full["data_basis"] == "image_only"
+    ann = client.get(f"/analysis/inputs/{iid}/annotated")
+    assert ann.status_code == 200 and ann.headers["content-type"] == "image/png"
+    listed = client.get("/analysis/inputs").json()[0]
+    assert listed["usable"] == 1 and listed["summary"]["candles"] == 50
+    assert client.get("/signals").json() == []  # still no invented signal
+
+
+def test_quality_threshold_follows_settings(client):
+    blurry = cv2.GaussianBlur(render_chart(random_walk_ohlc(50, seed=9)).image, (7, 7), 0)
+    data = cv2.imencode(".png", blurry)[1].tobytes()
+    client.patch("/settings", json={"min_data_quality_to_signal": 0.95})
+    strict = submit(client, data).json()["analysis"]
+    client.patch("/settings", json={"min_data_quality_to_signal": 0.3})
+    lenient = submit(client, data).json()["analysis"]
+    assert strict["reason_code"] == "image_quality_insufficient"
+    assert lenient["reason_code"] == "signal_engine_not_installed"
+
+
+def test_capture_requires_permission_and_uses_region(client, capturer):
+    assert client.post("/analysis/capture").status_code == 403
+    client.patch("/settings", json={"screen_capture_allowed": True,
+                                    "capture_region": {"left": 10, "top": 20, "width": 900, "height": 500}})
+    r = client.post("/analysis/capture")
+    assert r.status_code == 201, r.text
+    assert capturer.calls[-1] == {"left": 10, "top": 20, "width": 900, "height": 500}
+    assert r.json()["input"]["input_mode"] == "screen_region"
+    assert r.json()["analysis"]["reading"]["candles"] == 50
+
+
+def test_capture_failure_reported(client, capturer):
+    client.patch("/settings", json={"screen_capture_allowed": True})
+    capturer.fail = "no display"
+    r = client.post("/analysis/capture")
+    assert r.status_code == 503 and "no display" in r.json()["detail"]
+
+
+def test_capture_region_validation(client):
+    assert client.patch("/settings", json={"capture_region": {"left": 0, "top": 0, "width": 50, "height": 50}}).status_code == 422
+    assert client.patch("/settings", json={"capture_region": {"x": 0}}).status_code == 422
+    assert client.patch("/settings", json={"capture_interval_sec": 1}).status_code == 422
+
+
+def _wait_for(pred, timeout=10.0):
+    import time
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if pred():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def test_continuous_screen_reading_and_kill_switch(client, capturer):
+    client.patch("/settings", json={"screen_capture_allowed": True, "capture_interval_sec": 2})
+    st = client.post("/analysis/start", json={"input_mode": "continuous_screen"}).json()
+    assert st["screen_watch"]["active"] is True
+    assert _wait_for(lambda: client.get("/analysis/status").json()["screen_watch"]["latest"] is not None)
+    st = client.get("/analysis/status").json()
+    assert st["screen_watch"]["latest"]["summary"]["candles"] == 50
+    assert st["recommendation"]["signal"] == "WAIT"
+    assert st["recommendation"]["reason_code"] == "signal_engine_not_installed"
+    assert client.get("/analysis/inputs").json() == []  # frames are not stored
+    st = client.post("/analysis/emergency-stop").json()
+    assert st["screen_watch"]["active"] is False
+
+
+def test_revoking_permission_stops_continuous_reading(client):
+    client.patch("/settings", json={"screen_capture_allowed": True})
+    client.post("/analysis/start", json={"input_mode": "continuous_screen"})
+    assert client.get("/analysis/status").json()["screen_watch"]["active"] is True
+    client.patch("/settings", json={"screen_capture_allowed": False})
+    assert client.get("/analysis/status").json()["screen_watch"]["active"] is False

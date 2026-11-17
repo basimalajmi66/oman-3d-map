@@ -116,6 +116,27 @@ void main() {
         throwsA(predicate((e) => e is EngineException && e.statusCode == 422)));
   }, skip: skip);
 
+  test('phase 3: real chart image is read by the engine (candles, prices, annotated preview)', () async {
+    final chart = File(p.join(dataDir.path, 'chart_fixture.png'));
+    final gen = await Process.run('python3', [
+      '-c',
+      'import cv2,sys; from uata.vision.synthetic import render_chart, random_walk_ohlc; '
+          'cv2.imwrite(sys.argv[1], render_chart(random_walk_ohlc(45, seed=3), style="light_tv").image)',
+      chart.path,
+    ], workingDirectory: backend);
+    expect(gen.exitCode, 0, reason: '${gen.stderr}');
+    final r = await api.submitChartImage(
+        UploadFile(name: 'chart.png', length: await chart.length(), openRead: chart.openRead),
+        inputMode: 'upload');
+    final reading = (r['analysis'] as Map)['reading'] as Map;
+    expect(reading['usable'], true);
+    expect(reading['candles'], 45);
+    expect(reading['closed_candles'], 44);
+    expect((r['analysis'] as Map)['reason_code'], 'signal_engine_not_installed');
+    final png = await api.chartAnnotated((r['input'] as Map)['id'] as int);
+    expect(png.take(4), [0x89, 0x50, 0x4E, 0x47]);
+  }, skip: skip);
+
   test('token is required', () async {
     final bad = HttpEngineApi(baseUrl: api.baseUrl, tokenProvider: () async => 'wrong');
     await expectLater(bad.getSettings(), throwsA(predicate((e) => e is EngineException && e.statusCode == 401)));

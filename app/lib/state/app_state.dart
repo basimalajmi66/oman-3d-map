@@ -144,8 +144,26 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> startAnalysis({String inputMode = 'upload'}) async {
-    status = (await _guard(() => engine.start(inputMode: inputMode)))!;
+  /// Continuous screen reading when the user enabled it *and* granted screen access.
+  String get defaultInputMode =>
+      settings['continuous_analysis'] == true && settings['screen_capture_allowed'] == true
+          ? 'continuous_screen'
+          : 'upload';
+
+  bool get canCaptureScreen => window.isDesktop && settings['screen_capture_allowed'] == true;
+
+  Json? get screenWatch => (status['screen_watch'] as Map?)?.cast<String, dynamic>();
+
+  Future<Json> captureScreen() async {
+    final r = (await _guard(engine.captureScreen))!;
+    lastChartResult = r;
+    notifyListeners();
+    return r;
+  }
+
+  Future<void> startAnalysis({String? inputMode}) async {
+    final mode = inputMode ?? defaultInputMode;
+    status = (await _guard(() => engine.start(inputMode: mode)))!;
     await _pushOverlay();
   }
 

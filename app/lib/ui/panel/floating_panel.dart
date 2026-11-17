@@ -48,6 +48,13 @@ class FloatingPanel extends StatelessWidget {
     if (ok && result != null && context.mounted) await showChartResult(context, result!);
   }
 
+  Future<void> _captureScreen(BuildContext context) async {
+    final app = AppScope.read(context);
+    Json? result;
+    final ok = await runWithFeedback(context, () async => result = await app.captureScreen());
+    if (ok && result != null && context.mounted) await showChartResult(context, result!);
+  }
+
   Future<void> _toggleOverlay(BuildContext context) async {
     final app = AppScope.read(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
@@ -89,6 +96,15 @@ class FloatingPanel extends StatelessWidget {
                             label: Text(app.t('analyze_image'), overflow: TextOverflow.ellipsis),
                           ),
                         ),
+                        if (app.canCaptureScreen) ...[
+                          const SizedBox(width: 6),
+                          IconButton.outlined(
+                            key: const Key('btn_capture'),
+                            tooltip: app.t('capture_screen'),
+                            onPressed: app.connected && !app.busy ? () => _captureScreen(context) : null,
+                            icon: const Icon(Icons.screenshot_monitor_outlined),
+                          ),
+                        ],
                         if (app.overlay.supported) ...[
                           const SizedBox(width: 6),
                           IconButton.outlined(
@@ -283,11 +299,25 @@ class _StatusLine extends StatelessWidget {
       ]);
     }
     final reason = app.recommendation['reason_code'] as String?;
+    final watch = app.screenWatch;
+    final latest = (watch?['latest'] as Map?)?.cast<String, dynamic>();
+    final summary = (latest?['summary'] as Map?)?.cast<String, dynamic>();
     return Column(children: [
       Text(app.t('state_${app.state}'), key: const Key('status_text'),
           textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
       if (reason != null)
         Text(app.t('reason_$reason'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
+      if (summary != null)
+        Text(
+          '${app.t('last_reading')}: ${summary['candles']} · ${app.t('data_quality')} '
+          '${(((latest!['data_quality'] as num?) ?? 0) * 100).round()}%',
+          key: const Key('watch_line'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 11),
+        ),
+      if (watch?['error'] != null)
+        Text('${watch!['error']}', key: const Key('watch_error'),
+            textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: SignalColors.sell)),
     ]);
   }
 }

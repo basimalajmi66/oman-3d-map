@@ -113,6 +113,22 @@ class HttpEngineApi implements EngineApi {
       _list(await _get('/analysis/inputs', {'limit': '$limit'}));
 
   @override
+  Future<Json> captureScreen() async => _map(await _post('/analysis/capture'));
+  @override
+  Future<List<int>> chartAnnotated(int inputId) async {
+    final h = await _headers();
+    try {
+      final r = await _client.get(_u('/analysis/inputs/$inputId/annotated'), headers: h).timeout(timeout);
+      if (r.statusCode != 200) throw EngineException(r.statusCode, 'annotated image unavailable');
+      return r.bodyBytes;
+    } on EngineException {
+      rethrow;
+    } catch (e) {
+      throw EngineException(0, 'engine unreachable: $e');
+    }
+  }
+
+  @override
   Future<List<Json>> listSources({String? kind, String? category}) async =>
       _list(await _get('/knowledge/sources', {'kind': kind, 'category': category}));
   @override

@@ -1,8 +1,8 @@
 """Analysis session control and the emergency stop (kill switch).
 
-Phase 1 scope: sessions are created, tracked and stopped; the analysis engine
-itself arrives in Phases 3–8. Until then ``status()`` honestly reports
-``engine_available = False`` and the current recommendation is always WAIT with
+Sessions are created, tracked and stopped here. Chart reading exists since
+Phase 3; the signal engine arrives in Phase 8. Until then ``status()`` honestly
+reports ``engine_available = False`` and the recommendation is always WAIT with
 an explicit reason — no fabricated signal is ever produced.
 """
 
@@ -15,7 +15,7 @@ from uata.db.database import Database, audit, row_to_dict, utcnow
 
 ENGINE_COMPONENTS = {
     # name: available-in-this-build
-    "chart_vision": False,       # Phase 3
+    "chart_vision": True,        # Phase 3 ✔
     "technical_analysis": False, # Phase 4
     "knowledge_rag": False,      # Phase 5 (Phase 1 provides keyword search only)
     "video_learning": False,     # Phase 6
@@ -32,8 +32,9 @@ class PermissionRequired(Exception):
 
 
 class ControlService:
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, watcher=None):
         self.db = db
+        self.watcher = watcher  # ScreenWatcher for continuous_screen sessions (optional)
         self._lock = threading.Lock()
         self._halted = False
 
@@ -62,6 +63,8 @@ class ControlService:
 
     def stop(self, reason: str = "user_stop", emergency: bool = False) -> int:
         """Stop every running session. Returns how many were stopped."""
+        if self.watcher is not None:
+            self.watcher.stop()
         with self._lock, self.db.session() as conn:
             if emergency:
                 self._halted = True
@@ -88,12 +91,17 @@ class ControlService:
             state, reason = "running_no_engine", "analysis_engine_not_installed"
         else:
             state, reason = "analyzing", None
+        watch = self.watcher.snapshot() if self.watcher is not None else None
+        if session is not None and watch and watch["latest"] and not self._halted:
+            # the screen is being read: say why there is still no signal
+            reason = "signal_engine_not_installed" if watch["latest"]["usable"] else "image_quality_insufficient"
         return {
             "state": state,
             "halted": self._halted,
             "session": session,
             "engine_available": engine_ready,
             "components": ENGINE_COMPONENTS,
+            "screen_watch": watch,
             # The panel shows this. Without an engine it is always WAIT, never a guess.
             "recommendation": {
                 "signal": "WAIT",

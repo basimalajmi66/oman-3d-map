@@ -64,6 +64,9 @@ class Settings(BaseModel):
 
     # --- privacy / permissions
     screen_capture_allowed: bool = False  # must be explicitly granted by the user
+    # region of the screen to read: None = whole primary monitor
+    capture_region: dict[str, int] | None = None
+    capture_interval_sec: int = Field(5, ge=2, le=60)  # continuous screen reading cadence
     external_data_sources_allowed: bool = False
 
     @model_validator(mode="after")
@@ -78,6 +81,12 @@ class Settings(BaseModel):
         # fill any indicator missing from a partial update
         for name in INDICATORS:
             self.indicators.setdefault(name, True)
+        if self.capture_region is not None:
+            keys = {"left", "top", "width", "height"}
+            if set(self.capture_region) != keys:
+                raise ValueError(f"capture_region needs exactly {sorted(keys)}")
+            if self.capture_region["width"] < 200 or self.capture_region["height"] < 150:
+                raise ValueError("capture_region is too small to contain a readable chart (min 200x150)")
         if sum(self.indicators.values()) < 2:
             raise ValueError("at least two analysis factors must stay enabled")
         return self

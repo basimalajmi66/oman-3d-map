@@ -22,7 +22,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
-MIGRATIONS = [1, 2]  # append new versions here, add schema_v<N>.sql next to this file
+MIGRATIONS = [1, 2, 3]  # append new versions here, add schema_v<N>.sql next to this file
 
 
 def utcnow() -> str:

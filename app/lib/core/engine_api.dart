@@ -45,6 +45,10 @@ abstract class EngineApi {
   /// [inputMode]: 'upload', 'share', 'screenshot' or 'screen_region'.
   Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload'});
   Future<List<Json>> listChartInputs({int limit = 50});
+  /// One screenshot (screen or configured region), read immediately. Needs screen permission.
+  Future<Json> captureScreen();
+  /// PNG of the image with what the reader detected drawn on it.
+  Future<List<int>> chartAnnotated(int inputId);
 
   // knowledge library
   Future<List<Json>> listSources({String? kind, String? category});

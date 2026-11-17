@@ -22,6 +22,8 @@ class FakeEngine implements EngineApi {
     'panel_always_on_top': true,
     'panel_opacity': 0.95,
     'screen_capture_allowed': false,
+    'capture_region': null,
+    'capture_interval_sec': 5,
     'external_data_sources_allowed': false,
   };
   Json? session;
@@ -71,7 +73,8 @@ class FakeEngine implements EngineApi {
       'halted': halted,
       'session': session,
       'engine_available': false,
-      'components': {'chart_vision': false, 'signal_engine': false},
+      'components': {'chart_vision': true, 'signal_engine': false},
+      'screen_watch': screenWatch,
       'recommendation': {'signal': 'WAIT', 'reason_code': reason, 'confidence': null, 'duration_sec': null},
     };
   }
@@ -116,15 +119,45 @@ class FakeEngine implements EngineApi {
     final input = {'id': ++_id, 'input_mode': inputMode, 'width': 800, 'height': 450,
       'created_at': '2026-11-17T10:00:00.000+00:00'};
     chartInputs.add(input);
-    return {
-      'input': input,
-      'analysis': {'signal': 'WAIT', 'reason_code': 'analysis_engine_not_installed', 'data_basis': 'image_only',
-        'confidence': null},
-    };
+    return {'input': input, 'analysis': _analysis()};
   }
 
   @override
   Future<List<Json>> listChartInputs({int limit = 50}) async => chartInputs.reversed.toList();
+
+  Json reading = {
+    'usable': true, 'abstain_reasons': <String>[], 'data_quality': 0.93, 'candles': 50, 'closed_candles': 49,
+    'bullish': 27, 'bearish': 22, 'last_closed_direction': 'up', 'last_closed_close': 1.10234,
+    'prices_read': true, 'timeframe_sec': 30, 'timeframe_label': '30s', 'warnings': <String>[],
+  };
+
+  @override
+  Future<Json> captureScreen() async {
+    calls.add('capture');
+    if (settings['screen_capture_allowed'] != true) throw EngineException(403, 'permission');
+    final input = {'id': ++_id, 'input_mode': 'screenshot', 'width': 1920, 'height': 1080};
+    chartInputs.add(input);
+    return {'input': input, 'analysis': _analysis()};
+  }
+
+  Json _analysis() => {
+        'signal': 'WAIT',
+        'reason_code': reading['usable'] == true ? 'signal_engine_not_installed' : 'image_quality_insufficient',
+        'data_basis': 'image_only', 'confidence': null, 'data_quality': reading['data_quality'], 'reading': reading,
+      };
+
+  @override
+  Future<List<int>> chartAnnotated(int inputId) async {
+    calls.add('annotated:$inputId');
+    // 1x1 transparent PNG
+    return const [
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196,
+      137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5, 0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68,
+      174, 66, 96, 130,
+    ];
+  }
+
+  Json? screenWatch;
 
   // ---------------------------------------------------------------- knowledge
   @override

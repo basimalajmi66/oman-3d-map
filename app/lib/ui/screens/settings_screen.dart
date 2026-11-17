@@ -40,7 +40,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  Future<void> _set(String key, Object value) => runWithFeedback(context, () => app.updateSettings({key: value}));
+  Future<void> _set(String key, Object value) =>
+      runWithFeedback(context, () => app.updateSettings({key: value == 'null' ? null : value}));
 
   String _tfLabel(int s) => s < 60 ? '$s${app.t('seconds')}' : s < 3600 ? '${s ~/ 60}m' : s < 86400 ? '${s ~/ 3600}h' : '1D';
 
@@ -272,6 +273,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           value: s['screen_capture_allowed'] == true,
           onChanged: _togglePermission,
         ),
+        if (s['screen_capture_allowed'] == true) ...[
+          _header('capture_section'),
+          _dropdown<int>('capture_interval_sec', app.t('capture_interval'), const [2, 3, 5, 10, 15, 30, 60], (v) => '$v$secs'),
+          _RegionEditor(
+            region: (s['capture_region'] as Map?)?.cast<String, dynamic>(),
+            app: app,
+            onChanged: (r) => _set('capture_region', r ?? 'null'),
+          ),
+        ],
         SwitchListTile(
           title: Text(app.t('external_sources')),
           value: s['external_data_sources_allowed'] == true,
@@ -299,6 +309,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: _wipe,
         ),
         const SizedBox(height: 32),
+      ]),
+    );
+  }
+}
+
+
+/// Full screen, or a custom rectangle in screen pixels.
+class _RegionEditor extends StatefulWidget {
+  const _RegionEditor({required this.region, required this.app, required this.onChanged});
+  final Map<String, dynamic>? region;
+  final AppState app;
+  final ValueChanged<Map<String, int>?> onChanged;
+  @override
+  State<_RegionEditor> createState() => _RegionEditorState();
+}
+
+class _RegionEditorState extends State<_RegionEditor> {
+  static const _keys = ['left', 'top', 'width', 'height'];
+  late final Map<String, TextEditingController> _c = {
+    for (final k in _keys) k: TextEditingController(text: '${widget.region?[k] ?? (k == 'width' ? 1000 : k == 'height' ? 600 : 0)}')
+  };
+
+  @override
+  void dispose() {
+    for (final c in _c.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Map<String, int>? _parsed() {
+    final m = {for (final k in _keys) k: int.tryParse(_c[k]!.text)};
+    if (m.values.any((v) => v == null)) return null;
+    return m.cast<String, int>();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = widget.app;
+    final custom = widget.region != null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(app.t('capture_region')),
+        const SizedBox(height: 6),
+        SegmentedButton<bool>(
+          key: const Key('seg_region'),
+          segments: [
+            ButtonSegment(value: false, label: Text(app.t('full_screen'))),
+            ButtonSegment(value: true, label: Text(app.t('custom_region'))),
+          ],
+          selected: {custom},
+          onSelectionChanged: (v) => widget.onChanged(v.first ? _parsed() : null),
+        ),
+        if (custom) ...[
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final k in _keys)
+              SizedBox(
+                width: 110,
+                child: TextField(
+                  key: Key('region_$k'),
+                  controller: _c[k],
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: app.t('region_$k')),
+                  onSubmitted: (_) {
+                    final r = _parsed();
+                    if (r != null) widget.onChanged(r);
+                  },
+                ),
+              ),
+          ]),
+        ],
       ]),
     );
   }

@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - run: pip install -r backend/requirements-dev.txt
       - run: python -m pytest
         working-directory: backend
@@ -24,6 +25,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - run: pip install -r backend/requirements.txt
       - uses: subosito/flutter-action@v2
         with:

@@ -80,7 +80,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(e.calls, contains('chart:upload:chart.png'));
       expect(find.text(tr('ar', 'chart_result')), findsOneWidget);
-      expect(find.text(tr('ar', 'reason_analysis_engine_not_installed')), findsOneWidget);
+      expect(find.text(tr('ar', 'reason_signal_engine_not_installed')), findsOneWidget);
       expect(find.textContaining('800×450'), findsOneWidget);
       expect(find.textContaining(tr('ar', 'image_only')), findsOneWidget);
     });

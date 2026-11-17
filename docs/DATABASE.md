@@ -1,7 +1,7 @@
 # قاعدة البيانات المحلية
 
 * المحرك: SQLite بوضع WAL و`synchronous=NORMAL` — البيانات المؤكدة لا تضيع عند إغلاق البرنامج أو انقطاعه.
-* المخطط: `backend/uata/db/schema_v1.sql` و`schema_v2.sql` (المرحلة 2). الترحيلات مرقمة في `MIGRATIONS` وتُسجَّل في `schema_migrations`، وتُطبَّق تلقائياً عند التشغيل وبعد استعادة نسخة أقدم.
+* المخطط: `backend/uata/db/schema_v1.sql` و`schema_v2.sql` (المرحلة 2) و`schema_v3.sql` (المرحلة 3: حفظ قراءة الشارت مع كل صورة). الترحيلات مرقمة في `MIGRATIONS` وتُسجَّل في `schema_migrations`، وتُطبَّق تلقائياً عند التشغيل وبعد استعادة نسخة أقدم.
 * كل اتصال قصير العمر داخل معاملة `BEGIN IMMEDIATE` (آمن مع خيوط FastAPI).
 * الأعمدة المنتهية بـ `_json` تُفك تلقائياً (`tags_json` ← `tags`).
 
@@ -22,7 +22,7 @@
 | `analysis_sessions` | جلسات التحليل | جلسة واحدة `running` فقط |
 | `signals` | سجل الإشارات | `signal ∈ BUY/SELL/WAIT`؛ BUY/SELL تتطلب `duration_sec`؛ `confidence_calibrated`؛ `data_basis ∈ image_only/price_feed/image_and_feed` |
 | `trade_results` | نتائج الصفقات التي يدخلها المستخدم | `account_type ∈ simulation/demo/real` — لا تُخلط في الإحصاءات |
-| `analysis_inputs` (v2) | صور الشارت المرسلة للتحليل (رفع/مشاركة/لقطة شاشة) — منفصلة عن المكتبة | `input_mode ∈ upload/share/screenshot/screen_region`؛ أبعاد حقيقية مقروءة بـ OpenCV؛ آخر 500 فقط |
+| `analysis_inputs` (v2) | صور الشارت المرسلة للتحليل (رفع/مشاركة/لقطة شاشة) — منفصلة عن المكتبة | `input_mode ∈ upload/share/screenshot/screen_region`؛ أبعاد حقيقية مقروءة بـ OpenCV؛ آخر 500 فقط؛ v3: `reading_json` (القراءة الكاملة) و`data_quality` و`usable` |
 | `audit_log` | سجل التعلم والتدقيق: كل إضافة/اعتماد/رفض/تعديل إعداد/نسخ/استعادة | `actor ∈ user/system` |
 
 ## مخزن الملفات

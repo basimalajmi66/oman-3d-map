@@ -21,13 +21,15 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ValidationError
 
 from uata.config import API_VERSION, ENGINE_VERSION, Paths, _restrict_permissions
 from uata.db.database import Database
 from uata.services.backup_service import BackupError, BackupService
 from uata.services.chart_input_service import ChartInputService, InvalidImage
+from uata.services.screen_watch import ScreenWatcher
+from uata.vision.capture import CaptureUnavailable, Capturer, MssCapturer
 from uata.services.control_service import ControlService, PermissionRequired
 from uata.services.knowledge_service import Duplicate, KnowledgeService, NotFound
 from uata.services.records_service import RecordsService
@@ -46,16 +48,19 @@ class Services:
     records: RecordsService
     backup: BackupService
     chart_inputs: ChartInputService
+    watcher: ScreenWatcher
 
 
-def build_services(paths: Paths) -> Services:
+def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
     paths.ensure()
     db = Database(paths.db_file)
     db.migrate()
     _restrict_permissions(paths.db_file, 0o600)
-    return Services(paths, db, SettingsService(db), ControlService(db),
+    chart_inputs = ChartInputService(db, paths.files_dir)
+    watcher = ScreenWatcher(capturer or MssCapturer(), chart_inputs.read_only)
+    return Services(paths, db, SettingsService(db), ControlService(db, watcher),
                     KnowledgeService(db, paths.files_dir), RecordsService(db), BackupService(db, paths),
-                    ChartInputService(db, paths.files_dir))
+                    chart_inputs, watcher)
 
 
 # ---------------------------------------------------------------- request bodies
@@ -111,8 +116,8 @@ class ResultIn(BaseModel):
     notes: str | None = None
 
 
-def create_app(paths: Paths, token: str | None = None) -> FastAPI:
-    svc = build_services(paths)
+def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None = None) -> FastAPI:
+    svc = build_services(paths, capturer)
     token = token or secrets.token_urlsafe(32)
     paths.token_file.write_text(token, encoding="utf-8")
     _restrict_permissions(paths.token_file, 0o600)
@@ -151,7 +156,10 @@ def create_app(paths: Paths, token: str | None = None) -> FastAPI:
 
     @app.patch("/settings", dependencies=a)
     def patch_settings(patch: dict[str, Any]):
-        return svc.settings.update(patch).model_dump()
+        updated = svc.settings.update(patch)
+        if not updated.screen_capture_allowed and svc.watcher.active:
+            svc.watcher.stop()  # permission revoked: stop reading the screen at once
+        return updated.model_dump()
 
     @app.post("/settings/reset", dependencies=a)
     def reset_settings():
@@ -169,6 +177,9 @@ def create_app(paths: Paths, token: str | None = None) -> FastAPI:
             svc.control.start(body.input_mode, s.candle_timeframe_sec, body.asset, s.screen_capture_allowed)
         except PermissionRequired as e:
             raise HTTPException(403, str(e)) from None
+        if body.input_mode == "continuous_screen":
+            svc.watcher.start(s.capture_interval_sec, s.capture_region, s.min_data_quality_to_signal,
+                              allowed=lambda: svc.settings.get().screen_capture_allowed and not svc.control.halted)
         return svc.control.status()
 
     @app.post("/analysis/stop", dependencies=a)
@@ -190,14 +201,48 @@ def create_app(paths: Paths, token: str | None = None) -> FastAPI:
         if svc.control.halted:
             raise HTTPException(409, "emergency stop is active; start analysis again first")
         session = svc.control.current_session()
+        s = svc.settings.get()
         try:
-            return svc.chart_inputs.submit(file.file, file.filename, input_mode,
-                                           svc.settings.get().screen_capture_allowed,
-                                           session["id"] if session else None)
+            return svc.chart_inputs.submit(file.file, file.filename, input_mode, s.screen_capture_allowed,
+                                           session["id"] if session else None, s.min_data_quality_to_signal)
         except PermissionError as e:
             raise HTTPException(403, str(e)) from None
         except InvalidImage as e:
             raise HTTPException(422, str(e)) from None
+
+    @app.post("/analysis/capture", dependencies=a, status_code=201)
+    def capture_screen():
+        """One screenshot of the screen (or the configured region), read immediately."""
+        s = svc.settings.get()
+        if not s.screen_capture_allowed:
+            raise HTTPException(403, "screen capture permission has not been granted by the user")
+        if svc.control.halted:
+            raise HTTPException(409, "emergency stop is active; start analysis again first")
+        try:
+            img = svc.watcher.capturer.grab(s.capture_region)
+        except CaptureUnavailable as e:
+            raise HTTPException(503, str(e)) from None
+        session = svc.control.current_session()
+        mode = "screen_region" if s.capture_region else "screenshot"
+        try:
+            return svc.chart_inputs.submit_image(img, None, mode, True, session["id"] if session else None,
+                                                 s.min_data_quality_to_signal)
+        except InvalidImage as e:
+            raise HTTPException(422, str(e)) from None
+
+    @app.get("/analysis/inputs/{input_id}/reading", dependencies=a)
+    def chart_reading(input_id: int):
+        try:
+            return svc.chart_inputs.reading(input_id)
+        except KeyError:
+            raise HTTPException(404, "input not found") from None
+
+    @app.get("/analysis/inputs/{input_id}/annotated", dependencies=a)
+    def chart_annotated(input_id: int):
+        try:
+            return Response(svc.chart_inputs.annotated_png(input_id), media_type="image/png")
+        except KeyError:
+            raise HTTPException(404, "input not found") from None
 
     @app.get("/analysis/inputs", dependencies=a)
     def list_chart_inputs(limit: int = Query(50, le=500)):

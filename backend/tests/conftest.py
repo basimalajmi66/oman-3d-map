@@ -17,9 +17,33 @@ def paths(tmp_path) -> Paths:
     return Paths(tmp_path / "data").ensure()
 
 
+class FakeCapturer:
+    """Stands in for the OS screenshot API in tests."""
+
+    def __init__(self):
+        self.image = None
+        self.calls = []
+        self.fail = None
+
+    def grab(self, region):
+        from uata.vision.capture import CaptureUnavailable
+        self.calls.append(region)
+        if self.fail:
+            raise CaptureUnavailable(self.fail)
+        if self.image is None:
+            from uata.vision.synthetic import random_walk_ohlc, render_chart
+            self.image = render_chart(random_walk_ohlc(50, seed=11), style="dark_tv").image
+        return self.image
+
+
 @pytest.fixture
-def app(paths):
-    return create_app(paths, token=TOKEN)
+def capturer():
+    return FakeCapturer()
+
+
+@pytest.fixture
+def app(paths, capturer):
+    return create_app(paths, token=TOKEN, capturer=capturer)
 
 
 @pytest.fixture
