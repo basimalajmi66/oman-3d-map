@@ -11,6 +11,8 @@ bar i is identical whether or not later bars exist.
 
 from __future__ import annotations
 
+from bisect import bisect_right
+
 import numpy as np
 
 from uata.analysis import indicators as ind
@@ -48,8 +50,9 @@ class FeatureSet:
 
     # ------------------------------------------------------------ helpers
     def _confirmed(self, pivs: list[int], i: int, last: int = 30) -> list[int]:
-        out = [j for j in pivs if j + PIVOT_K <= i]
-        return out[-last:]
+        """The last ``last`` pivots confirmed at bar i (j + K <= i). ``pivs`` is sorted → binary search."""
+        end = bisect_right(pivs, i - PIVOT_K)
+        return pivs[max(0, end - last):end]
 
     def trend(self, i: int) -> str:
         a = self.atr[i]
@@ -80,19 +83,29 @@ class FeatureSet:
 
     def levels(self, i: int) -> list[tuple[float, str, int]]:
         """(price, kind, touches) from confirmed pivots up to i, clustered within 0.5 ATR, >= 2 touches."""
+        cache = self.__dict__.setdefault("_levels_cache", {})
+        if i in cache:
+            return cache[i]
+        if len(cache) > 4:  # a backtest walks forward: keep only the last few bars
+            cache.clear()
+        cache[i] = self._levels(i)
+        return cache[i]
+
+    def _levels(self, i: int) -> list[tuple[float, str, int]]:
         a = self.atr[i]
         if np.isnan(a) or a <= 0:
             return []
         pts = sorted([self.h[j] for j in self._confirmed(self.piv_hi, i)] +
                      [self.l[j] for j in self._confirmed(self.piv_lo, i)])
-        clusters: list[list[float]] = []
+        clusters: list[list[float]] = []  # [sum, count] — running mean, same result as np.mean
         for p in pts:
-            if clusters and abs(p - np.mean(clusters[-1])) <= 0.5 * a:
-                clusters[-1].append(p)
+            if clusters and abs(p - clusters[-1][0] / clusters[-1][1]) <= 0.5 * a:
+                clusters[-1][0] += p
+                clusters[-1][1] += 1
             else:
-                clusters.append([p])
-        return [(float(np.mean(cl)), "support" if np.mean(cl) < self.c[i] else "resistance", len(cl))
-                for cl in clusters if len(cl) >= 2]
+                clusters.append([p, 1])
+        c = self.c[i]
+        return [(float(sm / n), "support" if sm / n < c else "resistance", n) for sm, n in clusters if n >= 2]
 
     def market_condition(self, i: int) -> str:
         hist = self.atr_pct[max(0, i - 200):i + 1]

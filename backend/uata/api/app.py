@@ -14,6 +14,7 @@ Security model
 from __future__ import annotations
 
 import secrets
+from contextlib import asynccontextmanager
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -26,7 +27,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from uata.analysis.engine import TechnicalAnalyzer
 from uata.config import API_VERSION, ENGINE_VERSION, Paths, _restrict_permissions
-from uata.db.database import Database
+from uata.db.database import Database, audit, utcnow
 from uata.services.backup_service import BackupError, BackupService
 from uata.services.chart_input_service import ChartInputService, InvalidImage
 from uata.services.screen_watch import ScreenWatcher
@@ -59,10 +60,28 @@ class Services:
     strategies: strat.StrategyService
     signals: SignalService
     stats: StatsService
+    notices: list | None = None
+
+
+def _recover_corrupt_db(paths: Paths) -> list[dict]:
+    """A damaged database must not stop the engine or be overwritten: keep it aside, start fresh."""
+    notices: list[dict] = []
+    if paths.db_file.exists() and not Database(paths.db_file).integrity_ok():
+        stamp = utcnow().replace(":", "").replace("-", "").split(".")[0]
+        kept = paths.db_file.with_name(f"{paths.db_file.name}.corrupt-{stamp}")
+        paths.db_file.rename(kept)
+        for suffix in ("-wal", "-shm"):
+            side = Path(str(paths.db_file) + suffix)
+            if side.exists():
+                side.rename(Path(str(kept) + suffix))
+        notices.append({"code": "database_was_corrupt", "kept_as": kept.name,
+                        "advice": "restore your latest encrypted backup from Settings"})
+    return notices
 
 
 def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
     paths.ensure()
+    notices = _recover_corrupt_db(paths)
     db = Database(paths.db_file)
     db.migrate()
     _restrict_permissions(paths.db_file, 0o600)
@@ -75,9 +94,14 @@ def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
     watcher = ScreenWatcher(capturer or MssCapturer(), chart_inputs.read_only)
     videos = VideoService(db, paths.files_dir, knowledge,
                           stt_factory=lambda: FasterWhisperSTT(settings.get().stt_model_path))
-    return Services(paths, db, settings, ControlService(db, watcher),
+    services = Services(paths, db, settings, ControlService(db, watcher),
                     knowledge, records, BackupService(db, paths),
                     chart_inputs, watcher, videos, strategies, signals, StatsService(db))
+    services.notices = notices
+    if notices:
+        with db.session() as conn:
+            audit(conn, "system", "startup.recovered", **notices[0])
+    return services
 
 
 # ---------------------------------------------------------------- request bodies
@@ -197,7 +221,18 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
     paths.token_file.write_text(token, encoding="utf-8")
     _restrict_permissions(paths.token_file, 0o600)
 
-    app = FastAPI(title="Universal AI Trading Assistant — Local Engine", version=ENGINE_VERSION)
+    @asynccontextmanager
+    async def lifespan(_app):
+        yield
+        # graceful shutdown: stop reading the screen and let a running video job finish
+        svc.control.stop(reason="engine_shutdown")
+        svc.watcher.stop()
+        for sid in list(svc.videos._queue) + ([svc.videos._running] if svc.videos._running else []):
+            svc.videos.wait(sid, 30)
+
+    # no /docs, /redoc or /openapi.json: the API map is not served to other local processes
+    app = FastAPI(title="Universal AI Trading Assistant — Local Engine", version=ENGINE_VERSION, lifespan=lifespan,
+                  docs_url=None, redoc_url=None, openapi_url=None)
     app.state.services = svc
 
     def auth(x_uata_token: str | None = Header(default=None)) -> None:
@@ -220,7 +255,8 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
     # ------------------------------------------------------------ health
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, "engine_version": ENGINE_VERSION, "api_version": API_VERSION}
+        return {"ok": True, "engine_version": ENGINE_VERSION, "api_version": API_VERSION,
+                "notices": svc.notices or []}
 
     a = [Depends(auth)]
 

@@ -87,9 +87,15 @@ class Database:
         return int(row[0] or 0)
 
     def integrity_ok(self) -> bool:
-        conn = self._connect()
+        """True if SQLite's full integrity check passes. False for corrupt or non-database files."""
+        try:
+            conn = self._connect()
+        except sqlite3.DatabaseError:
+            return False
         try:
             return conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        except sqlite3.DatabaseError:
+            return False
         finally:
             conn.close()
 

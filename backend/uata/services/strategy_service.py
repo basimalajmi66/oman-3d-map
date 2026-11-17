@@ -165,7 +165,8 @@ class StrategyService:
             sets += ["definition_json=?", "version=?", "status='draft'", "approved_at=NULL"]
             args += [json.dumps(d, ensure_ascii=False), cur["version"] + 1]
         with self.db.session() as conn:
-            conn.execute(f"UPDATE strategies SET {', '.join(sets)}, updated_at=? WHERE id=?", (*args, utcnow(), sid))
+            conn.execute(f"UPDATE strategies SET {', '.join(sets)}, updated_at=? WHERE id=?",  # nosec B608 - fixed fragments
+                         (*args, utcnow(), sid))
             audit(conn, "user", "strategy.update", strategy_id=sid, fields=sorted(patch))
         return self.get(sid)
 

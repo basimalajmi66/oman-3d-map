@@ -90,6 +90,17 @@ class HttpEngineApi implements EngineApi {
   }
 
   @override
+  Future<List<Json>> notices() async {
+    try {
+      final r = await _client.get(_u('/health')).timeout(const Duration(seconds: 3));
+      final body = jsonDecode(utf8.decode(r.bodyBytes));
+      return _list((body as Map)['notices'] ?? const []);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  @override
   Future<Json> getSettings() async => _map(await _get('/settings'));
   @override
   Future<Json> patchSettings(Json patch) async => _map(await _patch('/settings', patch));

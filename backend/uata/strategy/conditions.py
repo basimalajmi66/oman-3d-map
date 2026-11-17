@@ -137,14 +137,23 @@ def describe(cond: dict, lang: str = "en") -> str:
     return tpl.format(**{k: v for k, v in cond.items() if k != "id"})
 
 
+EXPENSIVE = {"near_support": 3, "near_resistance": 3, "breakout_up": 3, "breakdown": 3, "pattern": 2,
+             "trend_up": 2, "trend_down": 2, "trend_sideways": 2, "market": 2}
+
+
+def _by_cost(conds: list[dict]) -> list[dict]:
+    """Cheap conditions first: all() short-circuits, the result is identical (AND is order-independent)."""
+    return sorted(conds, key=lambda c: EXPENSIVE.get(c["id"], 0))
+
+
 def signal_at(fs: FeatureSet, i: int, definition: dict) -> str | None:
     """'BUY' / 'SELL' / None at closed bar i. Vetoes block both sides; a bar matching both sides is skipped."""
     if not fs.ready(i):
         return None
     if any(holds(fs, i, c) for c in definition["veto"]):
         return None
-    long_ok = bool(definition["long"]["all"]) and all(holds(fs, i, c) for c in definition["long"]["all"])
-    short_ok = bool(definition["short"]["all"]) and all(holds(fs, i, c) for c in definition["short"]["all"])
+    long_ok = bool(definition["long"]["all"]) and all(holds(fs, i, c) for c in _by_cost(definition["long"]["all"]))
+    short_ok = bool(definition["short"]["all"]) and all(holds(fs, i, c) for c in _by_cost(definition["short"]["all"]))
     if long_ok and not short_ok:
         return "BUY"
     if short_ok and not long_ok:

@@ -121,7 +121,7 @@ class VideoService:
                     conn.execute("UPDATE knowledge_sources SET extraction_status='failed', notes=? WHERE id=?",
                                  (f"video analysis: {e}", source_id))
                     audit(conn, "system", "video.failed", source_id=source_id, error=str(e))
-            except Exception:  # the source may have been deleted meanwhile
+            except Exception:  # nosec B110 - the source may have been deleted meanwhile; nothing left to update
                 pass
 
     # ------------------------------------------------------------ results → library

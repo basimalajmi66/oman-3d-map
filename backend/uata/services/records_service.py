@@ -82,7 +82,7 @@ class RecordsService:
                 "data_quality")
         with self.db.session() as conn:
             rid = conn.execute(
-                f"INSERT INTO trade_results({','.join(cols)},created_at) VALUES ({','.join('?' * len(cols))},?)",
+                f"INSERT INTO trade_results({','.join(cols)},created_at) VALUES ({','.join('?' * len(cols))},?)",  # nosec B608 - constant column tuple
                 (*[data.get(c) for c in cols], utcnow())).lastrowid
             audit(conn, "user", "result.add", result_id=rid, account_type=data["account_type"])
             return row_to_dict(conn.execute("SELECT * FROM trade_results WHERE id=?", (rid,)).fetchone())

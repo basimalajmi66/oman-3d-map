@@ -31,6 +31,8 @@ class UploadFile {
 
 abstract class EngineApi {
   Future<bool> health();
+  /// Engine notices from /health (e.g. it started after setting a corrupt database aside).
+  Future<List<Json>> notices();
 
   // settings
   Future<Json> getSettings();

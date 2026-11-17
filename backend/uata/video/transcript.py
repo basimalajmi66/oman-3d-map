@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 - fixed ffmpeg argv, never a shell
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -74,7 +74,7 @@ def extract_audio(video: Path, out_wav: Path) -> bool:
     exe = ffmpeg_exe()
     if exe is None:
         raise RuntimeError("ffmpeg is not available")
-    r = subprocess.run([exe, "-y", "-v", "error", "-i", str(video), "-vn", "-ac", "1", "-ar", "16000",
+    r = subprocess.run([exe, "-y", "-v", "error", "-i", str(video), "-vn", "-ac", "1", "-ar", "16000",  # nosec B603
                         "-f", "wav", str(out_wav)], capture_output=True, text=True, timeout=3600)
     return r.returncode == 0 and out_wav.exists() and out_wav.stat().st_size > 1000
 

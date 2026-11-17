@@ -113,7 +113,7 @@ class Retriever:
         if fq:
             rows = conn.execute(
                 "SELECT i.id FROM knowledge_items_fts f JOIN knowledge_items i ON i.id=f.rowid "
-                f"WHERE knowledge_items_fts MATCH ?{status_sql} ORDER BY bm25(knowledge_items_fts) LIMIT 50",
+                f"WHERE knowledge_items_fts MATCH ?{status_sql} ORDER BY bm25(knowledge_items_fts) LIMIT 50",  # nosec B608 - only constant SQL fragments; all values are bound parameters
                 (fq,)).fetchall()
             for rank, r in enumerate(rows):
                 ranks.setdefault(r["id"], {})["kw"] = rank
@@ -121,7 +121,7 @@ class Retriever:
         qv = self.embedder.embed(q)
         rows = conn.execute(
             "SELECT e.item_id, e.vector FROM knowledge_embeddings e JOIN knowledge_items i ON i.id=e.item_id "
-            f"WHERE e.model=?{status_sql}", (self.embedder.name,)).fetchall()
+            f"WHERE e.model=?{status_sql}", (self.embedder.name,)).fetchall()  # nosec B608 - only constant SQL fragments; all values are bound parameters
         if rows:
             mat = np.frombuffer(b"".join(r["vector"] for r in rows), dtype=np.float32).reshape(len(rows), -1)
             sims = mat @ qv
@@ -140,7 +140,7 @@ class Retriever:
         meta = {r["id"]: r for r in conn.execute(
             "SELECT i.id, i.title, i.content, i.status, i.item_type, i.location, i.source_id, "
             "s.title AS source_title, s.kind AS source_kind FROM knowledge_items i "
-            f"LEFT JOIN knowledge_sources s ON s.id=i.source_id WHERE i.id IN ({','.join('?' * len(ids))})",
+            f"LEFT JOIN knowledge_sources s ON s.id=i.source_id WHERE i.id IN ({','.join('?' * len(ids))})",  # nosec B608 - placeholders only
             ids).fetchall()}
         out = []
         for score, iid, v in scored:

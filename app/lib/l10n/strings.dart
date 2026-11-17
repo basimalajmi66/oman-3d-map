@@ -518,6 +518,11 @@ const Map<String, Map<String, String>> _strings = {
     'ar': 'مراجعة مقترحة: "{name}" أداؤها الفعلي ({live_win_rate}، عينة {sample}) أقل إحصائياً من اختبارها ({backtest_win_rate}). القرار لك.',
     'en': 'Review suggested: "{name}" real results ({live_win_rate}, n={sample}) are statistically below its backtest ({backtest_win_rate}). Your decision.'
   },
+  // phase 10
+  'notice_database_was_corrupt': {
+    'ar': 'تعذرت قراءة قاعدة البيانات عند التشغيل؛ حُفظت كما هي باسم {kept_as} وبدأ النظام بقاعدة جديدة. استعد آخر نسخة احتياطية من الإعدادات.',
+    'en': 'The database could not be read at start-up; it was kept as {kept_as} and a fresh one was started. Restore your latest backup from Settings.'
+  },
   // indicator names
   'ind_price_action': {'ar': 'حركة السعر', 'en': 'Price action'},
   'ind_candlesticks': {'ar': 'الشموع اليابانية', 'en': 'Japanese candlesticks'},

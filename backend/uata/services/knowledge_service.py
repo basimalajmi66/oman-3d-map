@@ -312,7 +312,7 @@ class KnowledgeService:
         if not sets:
             return self.get_source(source_id)
         with self.db.session() as conn:
-            n = conn.execute(f"UPDATE knowledge_sources SET {', '.join(sets)}, updated_at=? WHERE id=?",
+            n = conn.execute(f"UPDATE knowledge_sources SET {', '.join(sets)}, updated_at=? WHERE id=?",  # nosec B608 - column names come from the allow-list checked above; values are bound
                              (*args, utcnow(), source_id)).rowcount
             if n == 0:
                 raise NotFound(f"source {source_id}")
@@ -368,7 +368,7 @@ class KnowledgeService:
             sets.append("status='pending_review'")
             sets.append("decided_at=NULL")
         with self.db.session() as conn:
-            n = conn.execute(f"UPDATE knowledge_items SET {', '.join(sets)}, updated_at=? WHERE id=?",
+            n = conn.execute(f"UPDATE knowledge_items SET {', '.join(sets)}, updated_at=? WHERE id=?",  # nosec B608 - column names come from the allow-list checked above; values are bound
                              (*args, utcnow(), item_id)).rowcount if sets else 1
             if n == 0:
                 raise NotFound(f"item {item_id}")
@@ -413,7 +413,8 @@ class KnowledgeService:
 
     @staticmethod
     def _public_source(d: dict[str, Any] | None) -> dict[str, Any]:
-        assert d is not None
+        if d is None:
+            raise NotFound("source")
         text = d.pop("extracted_text", None)
         d["extracted_chars"] = len(text) if text else 0
         return d

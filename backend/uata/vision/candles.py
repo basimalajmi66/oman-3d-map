@@ -181,8 +181,9 @@ def detect_candles(img: np.ndarray) -> tuple[list[DetectedCandle], dict]:
     min_h = open_h  # after the opening every remaining structure is at least this tall
     found = []
     for mask, loose, bullish in ((bull_m, bull_l, True), (bear_m, bear_l, False)):
+        orig_b, loose_b = mask > 0, loose > 0  # once per mask (was once per candle: 2 full-frame copies each)
         for x, y, w, h, m in _merge_same_column(_components(_clean(mask, open_h), min_h)):
-            found.append((x + int(m.sum(axis=0).argmax()), x, y, w, h, m, bullish, mask > 0, loose > 0))
+            found.append((x + int(m.sum(axis=0).argmax()), x, y, w, h, m, bullish, orig_b, loose_b))
     found.sort(key=lambda f: f[0])
     # wide boxes in the cleaned mask (price tags, legends) are not candles: a candle
     # body is never wider than the distance between neighbouring candles

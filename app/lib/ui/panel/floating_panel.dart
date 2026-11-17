@@ -79,6 +79,18 @@ class FloatingPanel extends StatelessWidget {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                     children: [
+                      for (final n in app.notices)
+                        Container(
+                          key: Key('notice_${n['code']}'),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                              border: Border.all(color: SignalColors.sell), borderRadius: BorderRadius.circular(8)),
+                          child: Text(
+                            app.t('notice_${n['code']}').replaceAll('{kept_as}', '${n['kept_as'] ?? ''}'),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
                       _SignalTiles(app: app, onOpen: () => showSignalDetails(context)),
                       const SizedBox(height: 8),
                       _Metrics(app: app),

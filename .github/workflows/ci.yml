@@ -17,6 +17,9 @@ jobs:
       - run: pip install -r backend/requirements-dev.txt
       - run: python -m pytest
         working-directory: backend
+      - name: Security scan (bandit; every exception is documented inline)
+        run: pip install bandit && python -m bandit -r uata -q
+        working-directory: backend
 
   flutter:
     runs-on: ubuntu-latest

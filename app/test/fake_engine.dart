@@ -40,6 +40,9 @@ class FakeEngine implements EngineApi {
 
   @override
   Future<bool> health() async => online;
+  List<Json> engineNotices = [];
+  @override
+  Future<List<Json>> notices() async => engineNotices;
 
   @override
   Future<Json> getSettings() async {
