@@ -54,6 +54,7 @@ class ScreenWatcher:
                             "usable": reading["usable"],
                             "technical": technical_summary(reading.get("technical")),
                             "knowledge": reading.get("knowledge", [])[:3],
+                            "decision": reading.get("decision"),
                         }
                         self.frames += 1
                         self.error = None

@@ -20,7 +20,7 @@ ENGINE_COMPONENTS = {
     "knowledge_rag": True,       # Phase 5 ✔
     "video_learning": True,      # Phase 6 ✔
     "strategy_engine": True,     # Phase 7 ✔
-    "signal_engine": False,      # Phase 8
+    "signal_engine": True,       # Phase 8 ✔
 }
 
 INPUT_MODES = ("upload", "screenshot", "screen_region", "continuous_screen", "price_feed")
@@ -37,6 +37,7 @@ class ControlService:
         self.watcher = watcher  # ScreenWatcher for continuous_screen sessions (optional)
         self._lock = threading.Lock()
         self._halted = False
+        self.last_decision: dict | None = None
 
     @property
     def halted(self) -> bool:
@@ -63,6 +64,7 @@ class ControlService:
 
     def stop(self, reason: str = "user_stop", emergency: bool = False) -> int:
         """Stop every running session. Returns how many were stopped."""
+        self.last_decision = None
         if self.watcher is not None:
             self.watcher.stop()
         with self._lock, self.db.session() as conn:
@@ -92,9 +94,14 @@ class ControlService:
         else:
             state, reason = "analyzing", None
         watch = self.watcher.snapshot() if self.watcher is not None else None
+        decision = None
         if session is not None and watch and watch["latest"] and not self._halted:
-            # the screen is being read: say why there is still no signal
-            reason = "signal_engine_not_installed" if watch["latest"]["usable"] else "image_quality_insufficient"
+            decision = watch["latest"].get("decision")
+            reason = (decision or {}).get("reason_code") or (
+                "signal_engine_not_installed" if watch["latest"]["usable"] else "image_quality_insufficient")
+        elif session is not None and not self._halted and self.last_decision is not None:
+            decision = self.last_decision  # latest upload / capture in this session
+            reason = decision.get("reason_code")
         return {
             "state": state,
             "halted": self._halted,
@@ -104,10 +111,17 @@ class ControlService:
             "screen_watch": watch,
             # The panel shows this. Without an engine it is always WAIT, never a guess.
             "recommendation": {
-                "signal": "WAIT",
+                "signal": (decision or {}).get("signal", "WAIT"),
                 "reason_code": reason,
-                "confidence": None,
+                "reasons": (decision or {}).get("reasons", []),
+                "supporting": (decision or {}).get("supporting", []),
+                "opposing": (decision or {}).get("opposing", []),
+                "steps": (decision or {}).get("steps", []),
+                "strategy": (decision or {}).get("strategy"),
+                "data_quality": (decision or {}).get("data_quality"),
+                "data_basis": (decision or {}).get("data_basis"),
+                "confidence": (decision or {}).get("confidence"),
                 "confidence_calibrated": False,
-                "duration_sec": None,
+                "duration_sec": (decision or {}).get("duration_sec"),
             },
         }

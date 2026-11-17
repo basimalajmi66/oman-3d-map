@@ -53,7 +53,7 @@ void main() {
 
   test('analysis control is honest without engine', () async {
     final st = await api.start();
-    expect(st['state'], 'running_no_engine');
+    expect(st['state'], 'analyzing'); // all engine components exist since Phase 8
     expect((st['recommendation'] as Map)['signal'], 'WAIT');
     await expectLater(api.start(inputMode: 'continuous_screen'),
         throwsA(predicate((e) => e is EngineException && e.isPermission)));
@@ -132,7 +132,7 @@ void main() {
     expect(reading['usable'], true);
     expect(reading['candles'], 45);
     expect(reading['closed_candles'], 44);
-    expect((r['analysis'] as Map)['reason_code'], 'signal_engine_not_installed');
+    expect((r['analysis'] as Map)['reason_code'], 'no_approved_strategy');
     final technical = (r['analysis'] as Map)['technical'] as Map;
     expect(technical['available'], true);
     expect(technical['candles_used'], 44); // closed candles only
@@ -211,6 +211,34 @@ void main() {
     });
     expect(edited['status'], 'draft');
     expect(edited['version'], 2);
+  }, skip: skip);
+
+  test('phase 8: approved strategy + uptrend chart → BUY with 14 steps, recorded once', () async {
+    // the phase-7 test above approved 'Contract bull' then edited it (now draft v2) → approve a fresh one
+    final ds = (await api.listDatasets()).firstWhere((d) => d['name'] == 'Uptrend');
+    final s = await api.createStrategy('Contract signal', {'long': {'all': [{'id': 'bullish_candle'}]}, 'duration_sec': 60});
+    expect((await api.backtest(s['id'] as int, ds['id'] as int))['qualifies'], true);
+    await api.approveStrategy(s['id'] as int);
+    final chart = File(p.join(dataDir.path, 'up_chart.png'));
+    final gen = await Process.run('python3', [
+      '-c',
+      'import cv2,sys; sys.path.insert(0,"tests"); from test_signal import uptrend_rows; '
+          'from uata.vision.synthetic import render_chart; '
+          'cv2.imwrite(sys.argv[1], render_chart(uptrend_rows(), style="dark_tv").image)',
+      chart.path,
+    ], workingDirectory: backend);
+    expect(gen.exitCode, 0, reason: '${gen.stderr}');
+    await api.patchSettings({'signal_cooldown_sec': 0});
+    final r = await api.submitChartImage(UploadFile(name: 'up.png', length: await chart.length(), openRead: chart.openRead));
+    final a = r['analysis'] as Map;
+    expect(a['signal'], 'BUY', reason: '${a['reason_code']} ${a['steps']}');
+    expect((a['steps'] as List), hasLength(14));
+    expect(a['confidence_calibrated'], false);
+    expect((a['strategy'] as Map)['name'], 'Contract signal');
+    final before = (await api.listSignals()).length;
+    final again = await api.submitChartImage(UploadFile(name: 'up.png', length: await chart.length(), openRead: chart.openRead));
+    expect((again['analysis'] as Map)['repeated'], true);
+    expect((await api.listSignals()).length, before);
   }, skip: skip);
 
   test('token is required', () async {

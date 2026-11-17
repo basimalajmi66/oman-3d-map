@@ -6,6 +6,7 @@ import '../../core/engine_api.dart';
 import '../../l10n/strings.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
+import 'signal_details.dart' show decisionSteps, strategyEvidence;
 
 /// Result of reading one chart image: the recommendation (WAIT until the signal
 /// engine exists), why, and exactly what the reader extracted — with an option
@@ -36,6 +37,13 @@ Future<void> showChartResult(BuildContext context, Json result) {
             ),
             const SizedBox(height: 8),
             if (reason != null) Text(app.t('reason_$reason'), key: const Key('chart_result_reason')),
+            if (analysis['repeated'] == true)
+              Text(app.t('repeated_note'), key: const Key('repeated_note'), style: const TextStyle(fontSize: 11)),
+            if (sig != 'WAIT' && analysis['duration_sec'] != null)
+              Text('${app.t('duration')}: ${analysis['duration_sec']}${app.t('seconds')}  ·  '
+                  '${app.t('confidence')}: ${analysis['confidence'] == null ? '—' : '${((analysis['confidence'] as num) * 100).round()}% (${app.t('uncalibrated')})'}',
+                  key: const Key('chart_result_trade')),
+            ...strategyEvidence(app, analysis),
             const SizedBox(height: 8),
             Text('${app.t('image_size')}: ${input['width']}×${input['height']}'),
             Text('${app.t('data_basis')}: ${basis == 'image_only' ? app.t('image_only') : basis ?? '—'}'),
@@ -48,6 +56,9 @@ Future<void> showChartResult(BuildContext context, Json result) {
             ],
             if (analysis['technical'] is Map) ...technicalLines(app, (analysis['technical'] as Map).cast<String, dynamic>()),
             if (analysis['knowledge'] is List) ...knowledgeLines(app, (analysis['knowledge'] as List).cast<Map>()),
+            ...decisionSteps(app, analysis),
+            const SizedBox(height: 8),
+            Text(app.t('manual_only'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
           ]),
         ),
       ),

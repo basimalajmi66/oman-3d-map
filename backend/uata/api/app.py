@@ -31,6 +31,7 @@ from uata.services.backup_service import BackupError, BackupService
 from uata.services.chart_input_service import ChartInputService, InvalidImage
 from uata.services.screen_watch import ScreenWatcher
 from uata.services.video_service import VideoService
+from uata.services.signal_service import SignalService
 from uata.services import strategy_service as strat
 from uata.video.transcript import FasterWhisperSTT
 from uata.vision.capture import CaptureUnavailable, Capturer, MssCapturer
@@ -55,6 +56,7 @@ class Services:
     watcher: ScreenWatcher
     videos: VideoService
     strategies: strat.StrategyService
+    signals: SignalService
 
 
 def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
@@ -63,14 +65,17 @@ def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
     db.migrate()
     _restrict_permissions(paths.db_file, 0o600)
     knowledge = KnowledgeService(db, paths.files_dir)
-    chart_inputs = ChartInputService(db, paths.files_dir, knowledge=knowledge)
-    watcher = ScreenWatcher(capturer or MssCapturer(), chart_inputs.read_only)
     settings = SettingsService(db)
+    records = RecordsService(db)
+    strategies = strat.StrategyService(db, paths.files_dir)
+    signals = SignalService(records, strategies, settings)
+    chart_inputs = ChartInputService(db, paths.files_dir, knowledge=knowledge, signals=signals)
+    watcher = ScreenWatcher(capturer or MssCapturer(), chart_inputs.read_only)
     videos = VideoService(db, paths.files_dir, knowledge,
                           stt_factory=lambda: FasterWhisperSTT(settings.get().stt_model_path))
     return Services(paths, db, settings, ControlService(db, watcher),
-                    knowledge, RecordsService(db), BackupService(db, paths),
-                    chart_inputs, watcher, videos, strat.StrategyService(db, paths.files_dir))
+                    knowledge, records, BackupService(db, paths),
+                    chart_inputs, watcher, videos, strategies, signals)
 
 
 # ---------------------------------------------------------------- request bodies
@@ -264,9 +269,11 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
         session = svc.control.current_session()
         s = svc.settings.get()
         try:
-            return svc.chart_inputs.submit(file.file, file.filename, input_mode, s.screen_capture_allowed,
-                                           session["id"] if session else None, s.min_data_quality_to_signal,
-                                           enabled=s.indicators)
+            out = svc.chart_inputs.submit(file.file, file.filename, input_mode, s.screen_capture_allowed,
+                                          session["id"] if session else None, s.min_data_quality_to_signal,
+                                          enabled=s.indicators)
+            svc.control.last_decision = out["analysis"]
+            return out
         except PermissionError as e:
             raise HTTPException(403, str(e)) from None
         except InvalidImage as e:
@@ -287,8 +294,10 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
         session = svc.control.current_session()
         mode = "screen_region" if s.capture_region else "screenshot"
         try:
-            return svc.chart_inputs.submit_image(img, None, mode, True, session["id"] if session else None,
-                                                 s.min_data_quality_to_signal, enabled=s.indicators)
+            out = svc.chart_inputs.submit_image(img, None, mode, True, session["id"] if session else None,
+                                                s.min_data_quality_to_signal, enabled=s.indicators)
+            svc.control.last_decision = out["analysis"]
+            return out
         except InvalidImage as e:
             raise HTTPException(422, str(e)) from None
 

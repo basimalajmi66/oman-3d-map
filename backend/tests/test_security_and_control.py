@@ -34,14 +34,13 @@ def test_status_idle_is_wait(client):
     st = client.get("/analysis/status").json()
     assert st["state"] == "idle"
     assert st["recommendation"]["signal"] == "WAIT"
-    assert st["engine_available"] is False
+    assert st["engine_available"] is True  # all components exist since Phase 8
 
 
-def test_start_without_engine_reports_honestly(client):
+def test_started_session_without_input_is_wait(client):
     st = client.post("/analysis/start", json={"input_mode": "upload"}).json()
-    assert st["state"] == "running_no_engine"
-    assert st["recommendation"]["signal"] == "WAIT"
-    assert st["recommendation"]["reason_code"] == "analysis_engine_not_installed"
+    assert st["state"] == "analyzing"
+    assert st["recommendation"]["signal"] == "WAIT"  # nothing analysed yet → no signal
     assert st["recommendation"]["confidence"] is None
     assert st["session"]["timeframe_sec"] == 30
 

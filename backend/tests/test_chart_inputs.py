@@ -124,7 +124,7 @@ def test_real_chart_is_read_and_stored(client):
     r = submit(client, chart_png(), name="eurusd.png", mode="share")
     assert r.status_code == 201
     a = r.json()["analysis"]
-    assert a["signal"] == "WAIT" and a["reason_code"] == "signal_engine_not_installed"
+    assert a["signal"] == "WAIT" and a["reason_code"] == "no_approved_strategy"
     assert a["reading"]["usable"] is True and a["reading"]["candles"] == 50
     assert a["reading"]["closed_candles"] == 49
     iid = r.json()["input"]["id"]
@@ -134,7 +134,9 @@ def test_real_chart_is_read_and_stored(client):
     assert ann.status_code == 200 and ann.headers["content-type"] == "image/png"
     listed = client.get("/analysis/inputs").json()[0]
     assert listed["usable"] == 1 and listed["summary"]["candles"] == 50
-    assert client.get("/signals").json() == []  # still no invented signal
+    # a real market analysis is recorded — as WAIT, with its reason (no approved strategy yet)
+    sigs = client.get("/signals").json()
+    assert len(sigs) == 1 and sigs[0]["signal"] == "WAIT" and sigs[0]["reasons"] == ["no_approved_strategy"]
 
 
 def test_quality_threshold_follows_settings(client):
@@ -145,7 +147,7 @@ def test_quality_threshold_follows_settings(client):
     client.patch("/settings", json={"min_data_quality_to_signal": 0.3})
     lenient = submit(client, data).json()["analysis"]
     assert strict["reason_code"] == "image_quality_insufficient"
-    assert lenient["reason_code"] == "signal_engine_not_installed"
+    assert lenient["reason_code"] == "no_approved_strategy"
 
 
 def test_capture_requires_permission_and_uses_region(client, capturer):
@@ -190,7 +192,7 @@ def test_continuous_screen_reading_and_kill_switch(client, capturer):
     st = client.get("/analysis/status").json()
     assert st["screen_watch"]["latest"]["summary"]["candles"] == 50
     assert st["recommendation"]["signal"] == "WAIT"
-    assert st["recommendation"]["reason_code"] == "signal_engine_not_installed"
+    assert st["recommendation"]["reason_code"] == "no_approved_strategy"
     assert client.get("/analysis/inputs").json() == []  # frames are not stored
     st = client.post("/analysis/emergency-stop").json()
     assert st["screen_watch"]["active"] is False

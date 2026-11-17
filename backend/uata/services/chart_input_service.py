@@ -39,7 +39,9 @@ class InvalidImage(ValueError):
 
 
 class ChartInputService:
-    def __init__(self, db: Database, files_dir: Path, reader: ChartReader | None = None, knowledge=None):
+    def __init__(self, db: Database, files_dir: Path, reader: ChartReader | None = None, knowledge=None,
+                 signals=None):
+        self.signals = signals  # SignalService (Phase 8); None → WAIT without a decision
         self.db = db
         self.files_dir = Path(files_dir)
         self.reader = reader or ChartReader()
@@ -83,7 +85,13 @@ class ChartInputService:
         reading = self._reader(min_quality).read(img).to_dict()
         reading["technical"] = analyze_reading(reading, enabled)
         reading["knowledge"] = self._related_knowledge(reading["technical"])
+        reading["decision"] = self._decide(reading, "screen", None)
         return reading
+
+    def _decide(self, reading: dict, stream: str, session_id: int | None) -> dict | None:
+        if self.signals is None:
+            return None
+        return self.signals.evaluate(reading, reading.get("technical"), reading.get("knowledge"), stream, session_id)
 
     def _reader(self, min_quality: float | None) -> ChartReader:
         if min_quality is None or min_quality == self.reader.min_quality:
@@ -115,6 +123,7 @@ class ChartInputService:
         reading = self._reader(min_quality).read(img).to_dict()
         reading["technical"] = analyze_reading(reading, enabled)  # Phase 4: closed candles only
         reading["knowledge"] = self._related_knowledge(reading["technical"])  # Phase 5: approved only
+        reading["decision"] = self._decide(reading, f"input:{input_mode}", session_id)  # Phase 8
 
         with self.db.session() as conn:
             iid = conn.execute(
@@ -182,14 +191,24 @@ class ChartInputService:
 
 
 def analysis_from_reading(reading: dict, width: int, height: int) -> dict[str, Any]:
-    """The recommendation for one image. WAIT until the signal engine (Phase 8) exists."""
+    """The recommendation for one image, from the decision engine (Phase 8)."""
+    d = reading.get("decision") or {}
     return {
-        "signal": "WAIT",
-        "reason_code": "signal_engine_not_installed" if reading["usable"] else "image_quality_insufficient",
+        "signal": d.get("signal", "WAIT"),
+        "reason_code": d.get("reason_code") or ("signal_engine_not_installed" if reading["usable"]
+                                                else "image_quality_insufficient"),
+        "reason_codes": d.get("reason_codes", []),
+        "reasons": d.get("reasons", []),
+        "supporting": d.get("supporting", []),
+        "opposing": d.get("opposing", []),
+        "steps": d.get("steps", []),
+        "strategy": d.get("strategy"),
+        "signal_id": d.get("signal_id"),
+        "repeated": d.get("repeated", False),
         "data_basis": "image_only",
-        "confidence": None,
+        "confidence": d.get("confidence"),
         "confidence_calibrated": False,
-        "duration_sec": None,
+        "duration_sec": d.get("duration_sec"),
         "data_quality": reading["data_quality"],
         "image": {"width": width, "height": height},
         "reading": reading["summary"],

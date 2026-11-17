@@ -64,9 +64,17 @@ class FakeEngine implements EngineApi {
   @override
   Future<Json> resetSettings() async => getSettings();
 
+  Json? recommendationOverride;
+
   @override
   Future<Json> status() async {
     _check();
+    if (recommendationOverride != null && session != null) {
+      return {
+        'state': 'analyzing', 'halted': false, 'session': session, 'engine_available': true,
+        'components': {'signal_engine': true}, 'screen_watch': screenWatch, 'recommendation': recommendationOverride,
+      };
+    }
     final reason = halted ? 'emergency_stop_active' : session == null ? 'analysis_not_running' : 'analysis_engine_not_installed';
     return {
       'state': halted ? 'halted' : session == null ? 'idle' : 'running_no_engine',
