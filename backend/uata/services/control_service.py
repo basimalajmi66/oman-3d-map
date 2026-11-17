@@ -18,7 +18,7 @@ ENGINE_COMPONENTS = {
     "chart_vision": True,        # Phase 3 ✔
     "technical_analysis": True,  # Phase 4 ✔
     "knowledge_rag": True,       # Phase 5 ✔
-    "video_learning": False,     # Phase 6
+    "video_learning": True,      # Phase 6 ✔
     "strategy_engine": False,    # Phase 7
     "signal_engine": False,      # Phase 8
 }

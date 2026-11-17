@@ -5,6 +5,7 @@ import '../../core/engine_api.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
 import 'learning_reports_screen.dart';
+import 'videos_screen.dart';
 
 /// Picks a file from the device. Replaceable in tests.
 typedef FilePickFn = Future<UploadFile?> Function();
@@ -170,6 +171,12 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
         IconButton(key: const Key('add_file'), tooltip: app.t('add_file'), icon: const Icon(Icons.upload_file), onPressed: _addFile),
         IconButton(key: const Key('add_url'), tooltip: app.t('add_url'), icon: const Icon(Icons.link), onPressed: _addUrl),
         IconButton(
+          key: const Key('open_videos'),
+          tooltip: app.t('videos'),
+          icon: const Icon(Icons.video_library_outlined),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VideosScreen())),
+        ),
+        IconButton(
           key: const Key('open_reports'),
           tooltip: app.t('learning_reports'),
           icon: const Icon(Icons.fact_check_outlined),
@@ -273,6 +280,14 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
         if (s['url'] != null) SelectableText('URL: ${s['url']}'),
         Text('${app.t('extraction')}: ${app.t('extraction_${s['extraction_status']}')}'),
         if (s['notes'] != null) Text('${s['notes']}', style: const TextStyle(fontSize: 12, color: SignalColors.wait)),
+        if (s['kind'] == 'video')
+          TextButton.icon(
+            key: const Key('open_video_page'),
+            icon: const Icon(Icons.movie_outlined),
+            label: Text(app.t('videos')),
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute<void>(builder: (_) => VideoPage(sourceId: s['id'] as int))),
+          ),
         if (s['report'] is Map) Text('${app.t('learning_reports')}: ${(s['report'] as Map)['summary']}',
             key: const Key('source_report_summary'), style: const TextStyle(fontSize: 12)),
       ]),

@@ -69,6 +69,12 @@ abstract class EngineApi {
   Future<List<Json>> listReports({String? status});
   Future<Json> decideReport(int reportId, String decision);
 
+  // educational videos (Phase 6)
+  Future<List<Json>> listVideos();
+  Future<Json> videoPage(int sourceId);
+  Future<Json> uploadSubtitles(int sourceId, UploadFile subtitles);
+  Future<Json> reanalyzeVideo(int sourceId);
+
   // signals & results
   Future<List<Json>> listSignals({int limit = 100});
   Future<Json> summary();

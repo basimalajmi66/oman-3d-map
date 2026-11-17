@@ -50,6 +50,8 @@ def extract_rules(text: str, location: str = "") -> list[CandidateRule]:
             continue
         cs = concepts(s)
         acts = sorted(c for c in cs if c in ACTIONS)
+        if "act_avoid" in acts and "act_enter" in acts:
+            acts.remove("act_enter")  # "do not enter" / "لا تدخل" is a no-entry rule, not an entry
         if not acts:
             continue
         conds = sorted(c for c in cs if c not in ACTIONS)

@@ -68,6 +68,8 @@ class Settings(BaseModel):
     capture_region: dict[str, int] | None = None
     capture_interval_sec: int = Field(5, ge=2, le=60)  # continuous screen reading cadence
     external_data_sources_allowed: bool = False
+    # optional local speech-to-text model folder (faster-whisper / CTranslate2); never downloaded
+    stt_model_path: str | None = None
 
     @model_validator(mode="after")
     def _check(self) -> "Settings":

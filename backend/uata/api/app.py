@@ -30,6 +30,8 @@ from uata.db.database import Database
 from uata.services.backup_service import BackupError, BackupService
 from uata.services.chart_input_service import ChartInputService, InvalidImage
 from uata.services.screen_watch import ScreenWatcher
+from uata.services.video_service import VideoService
+from uata.video.transcript import FasterWhisperSTT
 from uata.vision.capture import CaptureUnavailable, Capturer, MssCapturer
 from uata.services.control_service import ControlService, PermissionRequired
 from uata.services.knowledge_service import Duplicate, KnowledgeService, NotFound
@@ -50,6 +52,7 @@ class Services:
     backup: BackupService
     chart_inputs: ChartInputService
     watcher: ScreenWatcher
+    videos: VideoService
 
 
 def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
@@ -60,9 +63,12 @@ def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
     knowledge = KnowledgeService(db, paths.files_dir)
     chart_inputs = ChartInputService(db, paths.files_dir, knowledge=knowledge)
     watcher = ScreenWatcher(capturer or MssCapturer(), chart_inputs.read_only)
-    return Services(paths, db, SettingsService(db), ControlService(db, watcher),
+    settings = SettingsService(db)
+    videos = VideoService(db, paths.files_dir, knowledge,
+                          stt_factory=lambda: FasterWhisperSTT(settings.get().stt_model_path))
+    return Services(paths, db, settings, ControlService(db, watcher),
                     knowledge, RecordsService(db), BackupService(db, paths),
-                    chart_inputs, watcher)
+                    chart_inputs, watcher, videos)
 
 
 # ---------------------------------------------------------------- request bodies
@@ -331,12 +337,51 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
 
     @app.post("/knowledge/files", dependencies=a, status_code=201)
     def add_file(file: UploadFile = File(...), title: str | None = Form(None),
-                 category: str | None = Form(None), tags: str | None = Form(None)):
+                 category: str | None = Form(None), tags: str | None = Form(None),
+                 subtitles: UploadFile | None = File(None)):
         tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+        subs_text = subtitles.file.read().decode("utf-8-sig", errors="replace") if subtitles else None
+        if subs_text is not None:
+            from uata.video.transcript import parse_subtitles
+            parse_subtitles(subs_text)  # reject invalid subtitles before storing anything (ValueError → 400)
         try:
-            return svc.knowledge.add_file(file.filename or "upload.bin", file.file, title, category, tag_list)
+            src = svc.knowledge.add_file(file.filename or "upload.bin", file.file, title, category, tag_list)
         except Duplicate as e:
             raise HTTPException(409, {"message": str(e), "source_id": e.source_id}) from None
+        if src["kind"] == "video":  # Phase 6: analyse in the background
+            svc.videos.enqueue(src["id"], subtitles=subs_text)
+            src = svc.knowledge.get_source(src["id"])
+        return src
+
+    # ------------------------------------------------------------ videos (Phase 6)
+    @app.get("/videos", dependencies=a)
+    def list_videos():
+        return svc.videos.list()
+
+    @app.get("/videos/{source_id}", dependencies=a)
+    def video_page(source_id: int):
+        try:
+            return svc.videos.page(source_id)
+        except KeyError:
+            raise HTTPException(404, "video not found") from None
+
+    @app.post("/videos/{source_id}/subtitles", dependencies=a)
+    def video_subtitles(source_id: int, file: UploadFile = File(...)):
+        try:
+            svc.videos.page(source_id)
+        except KeyError:
+            raise HTTPException(404, "video not found") from None
+        svc.videos.enqueue(source_id, subtitles=file.file.read().decode("utf-8-sig", errors="replace"))
+        return svc.videos.page(source_id)
+
+    @app.post("/videos/{source_id}/reanalyze", dependencies=a)
+    def video_reanalyze(source_id: int):
+        try:
+            svc.videos.page(source_id)
+        except KeyError:
+            raise HTTPException(404, "video not found") from None
+        svc.videos.enqueue(source_id)
+        return svc.videos.page(source_id)
 
     @app.get("/knowledge/items", dependencies=a)
     def list_items(status: str | None = None, limit: int = Query(200, le=1000)):

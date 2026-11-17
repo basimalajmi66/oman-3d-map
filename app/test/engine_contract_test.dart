@@ -155,6 +155,33 @@ void main() {
     expect(hits.first['source_title'], 'قاعدة الارتداد');
   }, skip: skip);
 
+  test('phase 6: real video + subtitles → background analysis → timestamped rules, draft strategy', () async {
+    final video = File(p.join(dataDir.path, 'lesson.mp4'));
+    final srt = File(p.join(dataDir.path, 'lesson.srt'));
+    final gen = await Process.run('python3', [
+      '-c',
+      'import sys; from pathlib import Path; from uata.video.synthetic import write_video, SRT; '
+          'write_video(Path(sys.argv[1])); Path(sys.argv[2]).write_text(SRT, encoding="utf-8")',
+      video.path, srt.path,
+    ], workingDirectory: backend);
+    expect(gen.exitCode, 0, reason: '${gen.stderr}');
+    final src = await api.uploadFile(UploadFile(name: 'lesson.mp4', length: await video.length(), openRead: video.openRead));
+    expect(src['kind'], 'video');
+    final id = src['id'] as int;
+    await api.uploadSubtitles(id, UploadFile(name: 'lesson.srt', length: await srt.length(), openRead: srt.openRead));
+    Map<String, dynamic> page = await api.videoPage(id);
+    for (var i = 0; i < 120 && page['status'] != 'done' && page['status'] != 'failed'; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      page = await api.videoPage(id);
+    }
+    expect(page['status'], 'done', reason: '${page['error']}');
+    expect(page['transcript_source'], 'subtitles');
+    final times = (page['rules'] as List).map((r) => (r as Map)['location']).toSet();
+    expect(times, containsAll(['00:04', '00:16']));
+    expect((page['strategy'] as Map)['status'], 'draft');
+    expect((await api.listVideos()).map((v) => v['source_id']), contains(id));
+  }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
+
   test('token is required', () async {
     final bad = HttpEngineApi(baseUrl: api.baseUrl, tokenProvider: () async => 'wrong');
     await expectLater(bad.getSettings(), throwsA(predicate((e) => e is EngineException && e.statusCode == 401)));

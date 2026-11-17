@@ -55,7 +55,7 @@ def test_upload_binary_formats_are_stored_and_flagged(client):
     assert src["kind"] == "pdf" and src["extraction_status"] == "failed" and src["items"] == []
     assert src["notes"].startswith("extraction:")
     v = client.post("/knowledge/files", files={"file": ("lesson.mp4", io.BytesIO(b"\x00\x00\x00\x18ftypmp42"))}).json()
-    assert v["kind"] == "video" and v["extraction_status"] == "unsupported_yet"  # Phase 6
+    assert v["kind"] == "video" and v["extraction_status"] == "pending"  # Phase 6: analysed in the background
 
 
 def test_duplicate_upload_detected(client):

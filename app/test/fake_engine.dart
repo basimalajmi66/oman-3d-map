@@ -272,9 +272,38 @@ class FakeEngine implements EngineApi {
   @override
   Future<Json> decideReport(int reportId, String decision) async {
     calls.add('report:$decision:$reportId');
+    for (final p in videoPages.values) {
+      final rep = p['report'] as Map?;
+      if (rep != null && rep['id'] == reportId) {
+        rep['status'] = decision == 'approve' ? 'approved' : 'rejected';
+        return rep.cast<String, dynamic>();
+      }
+    }
     final r = reports.firstWhere((r) => r['id'] == reportId);
     r['status'] = decision == 'approve' ? 'approved' : 'rejected';
     return r;
+  }
+
+  // ---------------------------------------------------------------- videos
+  List<Json> videos = [];
+  Map<int, Json> videoPages = {};
+
+  @override
+  Future<List<Json>> listVideos() async => videos;
+  @override
+  Future<Json> videoPage(int sourceId) async => videoPages[sourceId]!;
+  @override
+  Future<Json> uploadSubtitles(int sourceId, UploadFile subtitles) async {
+    calls.add('subtitles:$sourceId:${subtitles.name}');
+    videoPages[sourceId]!['transcript_source'] = 'subtitles';
+    videoPages[sourceId]!['warnings'] = <String>[];
+    return videoPages[sourceId]!;
+  }
+
+  @override
+  Future<Json> reanalyzeVideo(int sourceId) async {
+    calls.add('reanalyze:$sourceId');
+    return videoPages[sourceId]!;
   }
 
   // ---------------------------------------------------------------- records

@@ -169,6 +169,16 @@ class HttpEngineApi implements EngineApi {
       _map(await _post('/knowledge/reports/$reportId/decision', {'decision': decision}));
 
   @override
+  Future<List<Json>> listVideos() async => _list(await _get('/videos'));
+  @override
+  Future<Json> videoPage(int sourceId) async => _map(await _get('/videos/$sourceId'));
+  @override
+  Future<Json> uploadSubtitles(int sourceId, UploadFile subtitles) async =>
+      _map(await _multipart('/videos/$sourceId/subtitles', subtitles, const {}));
+  @override
+  Future<Json> reanalyzeVideo(int sourceId) async => _map(await _post('/videos/$sourceId/reanalyze'));
+
+  @override
   Future<List<Json>> listSignals({int limit = 100}) async => _list(await _get('/signals', {'limit': '$limit'}));
   @override
   Future<Json> summary() async => _map(await _get('/stats/summary'));

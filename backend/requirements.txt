@@ -10,3 +10,4 @@ mss>=9.0
 pypdf>=4
 python-docx>=1.1
 openpyxl>=3.1
+imageio-ffmpeg>=0.5
