@@ -284,6 +284,84 @@ class FakeEngine implements EngineApi {
     return r;
   }
 
+  // ---------------------------------------------------------------- strategies (phase 7)
+  List<Json> strategies = [];
+  List<Json> datasets = [];
+  Json backtestResult = {};
+  List<String> approveRefusal = [];
+
+  @override
+  Future<List<Json>> strategyCatalog() async => [
+        {'id': 'rsi_below', 'params': {'value': 30}, 'ar': 'RSI أقل من {value}', 'en': 'RSI below {value}'},
+        {'id': 'bullish_candle', 'params': {}, 'ar': 'شمعة صاعدة', 'en': 'bullish candle'},
+      ];
+  @override
+  Future<List<Json>> listStrategies() async => strategies;
+  @override
+  Future<Json> getStrategy(int id) async => strategies.firstWhere((s) => s['id'] == id);
+  @override
+  Future<Json> createStrategy(String name, Json definition, {String description = ''}) async {
+    calls.add('create_strategy:$name');
+    final s = {'id': ++_id, 'name': name, 'status': 'draft', 'version': 1, 'definition': definition,
+      'description': description, 'readable_ar': {'long': ['شمعة صاعدة'], 'short': [], 'veto': []},
+      'readable': {'long': ['bullish candle'], 'short': [], 'veto': []}, 'latest_backtest': null};
+    strategies.add(s);
+    return s;
+  }
+
+  @override
+  Future<Json> updateStrategy(int id, Json patch) async => getStrategy(id);
+  @override
+  Future<void> deleteStrategy(int id) async => strategies.removeWhere((s) => s['id'] == id);
+  @override
+  Future<Json> backtest(int strategyId, int datasetId, {double payout = 0.85, double inSample = 0.7}) async {
+    calls.add('backtest:$strategyId:$datasetId');
+    return backtestResult;
+  }
+
+  @override
+  Future<Json> approveStrategy(int id) async {
+    calls.add('approve_strategy:$id');
+    if (approveRefusal.isNotEmpty) {
+      throw EngineException(409, 'strategy does not qualify for approval', reasons: approveRefusal);
+    }
+    final s = await getStrategy(id);
+    s['status'] = 'approved';
+    return s;
+  }
+
+  @override
+  Future<Json> retireStrategy(int id) async => getStrategy(id);
+  @override
+  Future<List<Json>> compareStrategies(List<int> ids, int datasetId, {double payout = 0.85}) async {
+    calls.add('compare:${ids.join(',')}:$datasetId');
+    return [
+      for (final id in ids)
+        {'strategy_id': id, 'name': 'S$id', 'trades': 40, 'win_rate': 0.6, 'expectancy_per_trade': 0.1,
+          'profit_factor': 1.3, 'qualifies': id == ids.first},
+    ];
+  }
+
+  @override
+  Future<List<Json>> listDatasets() async => datasets;
+  @override
+  Future<Json> importDataset(UploadFile csv, {String? name, String? asset}) async {
+    calls.add('import:${csv.name}');
+    final d = {'id': ++_id, 'name': csv.name, 'rows': 1500, 'timeframe_sec': 30, 'is_synthetic': 0};
+    datasets.add(d);
+    return d;
+  }
+
+  @override
+  Future<Json> syntheticDataset({int rows = 3000, int timeframeSec = 30, int seed = 0}) async {
+    final d = {'id': ++_id, 'name': 'SYNTHETIC', 'rows': rows, 'timeframe_sec': timeframeSec, 'is_synthetic': 1};
+    datasets.add(d);
+    return d;
+  }
+
+  @override
+  Future<void> deleteDataset(int id) async => datasets.removeWhere((d) => d['id'] == id);
+
   // ---------------------------------------------------------------- videos
   List<Json> videos = [];
   Map<int, Json> videoPages = {};

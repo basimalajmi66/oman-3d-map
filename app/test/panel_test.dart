@@ -104,7 +104,7 @@ void main() {
     await tester.tap(find.byKey(const Key('nav_training')));
     await tester.pumpAndSettle();
     expect(find.text(tr('ar', 'training_title')), findsOneWidget);
-    expect(find.byKey(const Key('comp_signal_engine')), findsOneWidget);
+    expect(find.text(tr('ar', 'strategies_tab')), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(w.calls, ['expanded:true', 'expanded:false']);

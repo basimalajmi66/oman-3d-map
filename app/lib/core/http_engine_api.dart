@@ -53,7 +53,8 @@ class HttpEngineApi implements EngineApi {
     final body = r.bodyBytes.isEmpty ? null : jsonDecode(utf8.decode(r.bodyBytes));
     if (r.statusCode >= 400) {
       final detail = body is Map ? body['detail'] : body;
-      throw EngineException(r.statusCode, detail is String ? detail : jsonEncode(detail));
+      final reasons = body is Map && body['reasons'] is List ? (body['reasons'] as List).cast<String>() : const <String>[];
+      throw EngineException(r.statusCode, detail is String ? detail : jsonEncode(detail), reasons: reasons);
     }
     return body;
   }
@@ -167,6 +168,40 @@ class HttpEngineApi implements EngineApi {
   @override
   Future<Json> decideReport(int reportId, String decision) async =>
       _map(await _post('/knowledge/reports/$reportId/decision', {'decision': decision}));
+
+  @override
+  Future<List<Json>> strategyCatalog() async => _list(await _get('/strategies/catalog'));
+  @override
+  Future<List<Json>> listStrategies() async => _list(await _get('/strategies'));
+  @override
+  Future<Json> getStrategy(int id) async => _map(await _get('/strategies/$id'));
+  @override
+  Future<Json> createStrategy(String name, Json definition, {String description = ''}) async =>
+      _map(await _post('/strategies', {'name': name, 'definition': definition, 'description': description}));
+  @override
+  Future<Json> updateStrategy(int id, Json patch) async => _map(await _patch('/strategies/$id', patch));
+  @override
+  Future<void> deleteStrategy(int id) async => _delete('/strategies/$id');
+  @override
+  Future<Json> backtest(int strategyId, int datasetId, {double payout = 0.85, double inSample = 0.7}) async =>
+      _map(await _post('/strategies/$strategyId/backtest', {'dataset_id': datasetId, 'payout': payout, 'in_sample': inSample}));
+  @override
+  Future<Json> approveStrategy(int id) async => _map(await _post('/strategies/$id/approve'));
+  @override
+  Future<Json> retireStrategy(int id) async => _map(await _post('/strategies/$id/retire'));
+  @override
+  Future<List<Json>> compareStrategies(List<int> ids, int datasetId, {double payout = 0.85}) async =>
+      _list(await _post('/strategies/compare', {'strategy_ids': ids, 'dataset_id': datasetId, 'payout': payout}));
+  @override
+  Future<List<Json>> listDatasets() async => _list(await _get('/datasets'));
+  @override
+  Future<Json> importDataset(UploadFile csv, {String? name, String? asset}) async =>
+      _map(await _multipart('/datasets/csv', csv, {'name': ?name, 'asset': ?asset}));
+  @override
+  Future<Json> syntheticDataset({int rows = 3000, int timeframeSec = 30, int seed = 0}) async =>
+      _map(await _post('/datasets/synthetic', {'rows': rows, 'timeframe_sec': timeframeSec, 'seed': seed}));
+  @override
+  Future<void> deleteDataset(int id) async => _delete('/datasets/$id');
 
   @override
   Future<List<Json>> listVideos() async => _list(await _get('/videos'));

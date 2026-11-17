@@ -182,6 +182,37 @@ void main() {
     expect((await api.listVideos()).map((v) => v['source_id']), contains(id));
   }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
 
+  test('phase 7: CSV import → strategy → leak-free backtest → gated approval → new version back to draft', () async {
+    final buf = StringBuffer('time,open,high,low,close\n');
+    var p0 = 1.0;
+    for (var i = 0; i < 1500; i++) {
+      final o = p0;
+      final c = o + 0.0004 + ((i * 7919) % 13 - 6) * 0.00002; // steady up-drift: a real, testable edge
+      buf.writeln('${1700000000 + i * 30},$o,${(c > o ? c : o) + 0.0001},${(c < o ? c : o) - 0.0001},$c');
+      p0 = c;
+    }
+    final bytes = buf.toString().codeUnits;
+    final ds = await api.importDataset(UploadFile(name: 'up.csv', length: bytes.length, openRead: () => Stream.value(bytes)),
+        name: 'Uptrend', asset: 'TEST');
+    expect(ds['is_synthetic'], 0);
+    expect(ds['timeframe_sec'], 30);
+    final s = await api.createStrategy('Contract bull', {
+      'long': {'all': [{'id': 'bullish_candle'}]}, 'duration_sec': 60,
+    });
+    await expectLater(api.approveStrategy(s['id'] as int),
+        throwsA(predicate((e) => e is EngineException && e.statusCode == 409 && e.reasons.contains('no_backtest_for_current_version'))));
+    final r = await api.backtest(s['id'] as int, ds['id'] as int);
+    expect(r['qualifies'], true, reason: '${r['gate_reasons']}');
+    expect((r['out_of_sample'] as Map)['trades'], greaterThanOrEqualTo(30));
+    final approved = await api.approveStrategy(s['id'] as int);
+    expect(approved['status'], 'approved');
+    final edited = await api.updateStrategy(s['id'] as int, {
+      'definition': {'long': {'all': [{'id': 'bullish_candle'}, {'id': 'trend_up'}]}, 'duration_sec': 60},
+    });
+    expect(edited['status'], 'draft');
+    expect(edited['version'], 2);
+  }, skip: skip);
+
   test('token is required', () async {
     final bad = HttpEngineApi(baseUrl: api.baseUrl, tokenProvider: () async => 'wrong');
     await expectLater(bad.getSettings(), throwsA(predicate((e) => e is EngineException && e.statusCode == 401)));

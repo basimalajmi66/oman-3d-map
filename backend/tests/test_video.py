@@ -180,7 +180,7 @@ def test_jobs_are_serialised_and_rerun_requests_honoured(services, video, client
     src = client.post("/knowledge/files", files={"file": ("lesson.mp4", video.read_bytes())}).json()
     r = client.post(f"/videos/{src['id']}/subtitles", files={"file": ("s.srt", SRT.encode())})
     assert r.status_code == 200
-    assert services.videos.wait(src["id"], 60)
+    assert services.videos.wait(src["id"], 180)
     page = client.get(f"/videos/{src['id']}").json()
     assert page["status"] == "done" and page["transcript_source"] == "subtitles"
     assert len([r_ for r_ in client.get("/knowledge/reports").json() if r_["source_id"] == src["id"]]) >= 1

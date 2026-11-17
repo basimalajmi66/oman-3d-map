@@ -31,6 +31,7 @@ from uata.services.backup_service import BackupError, BackupService
 from uata.services.chart_input_service import ChartInputService, InvalidImage
 from uata.services.screen_watch import ScreenWatcher
 from uata.services.video_service import VideoService
+from uata.services import strategy_service as strat
 from uata.video.transcript import FasterWhisperSTT
 from uata.vision.capture import CaptureUnavailable, Capturer, MssCapturer
 from uata.services.control_service import ControlService, PermissionRequired
@@ -53,6 +54,7 @@ class Services:
     chart_inputs: ChartInputService
     watcher: ScreenWatcher
     videos: VideoService
+    strategies: strat.StrategyService
 
 
 def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
@@ -68,7 +70,7 @@ def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
                           stt_factory=lambda: FasterWhisperSTT(settings.get().stt_model_path))
     return Services(paths, db, settings, ControlService(db, watcher),
                     knowledge, RecordsService(db), BackupService(db, paths),
-                    chart_inputs, watcher, videos)
+                    chart_inputs, watcher, videos, strat.StrategyService(db, paths.files_dir))
 
 
 # ---------------------------------------------------------------- request bodies
@@ -117,6 +119,37 @@ class CandleIn(BaseModel):
 class CandlesIn(BaseModel):
     candles: list[CandleIn] = Field(min_length=1, max_length=5000)
     last_is_forming: bool = True  # safe default: assume the newest candle is still open
+
+
+class StrategyIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = ""
+    definition: dict
+
+
+class StrategyFromRulesIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    source_id: int | None = None
+    item_ids: list[int] | None = None
+    duration_sec: int = 120
+
+
+class BacktestIn(BaseModel):
+    dataset_id: int
+    payout: float = 0.85
+    in_sample: float = 0.7
+
+
+class CompareIn(BaseModel):
+    strategy_ids: list[int] = Field(min_length=1, max_length=20)
+    dataset_id: int
+    payout: float = 0.85
+
+
+class SyntheticIn(BaseModel):
+    rows: int = 3000
+    timeframe_sec: int = 30
+    seed: int = 0
 
 
 class BackupIn(BaseModel):
@@ -352,6 +385,89 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
             svc.videos.enqueue(src["id"], subtitles=subs_text)
             src = svc.knowledge.get_source(src["id"])
         return src
+
+    # ------------------------------------------------------------ strategies & training (Phase 7)
+    @app.exception_handler(strat.NotFound)
+    async def _snf(_, exc):
+        return JSONResponse(status_code=404, content={"detail": f"not found: {exc}"})
+
+    @app.exception_handler(strat.GateRefused)
+    async def _gate(_, exc):
+        return JSONResponse(status_code=409, content={"detail": "strategy does not qualify for approval",
+                                                      "reasons": exc.reasons})
+
+    @app.get("/strategies/catalog", dependencies=a)
+    def strategy_catalog():
+        return strat.catalog()
+
+    @app.get("/strategies", dependencies=a)
+    def list_strategies():
+        return svc.strategies.list()
+
+    @app.post("/strategies", dependencies=a, status_code=201)
+    def create_strategy(body: StrategyIn):
+        return svc.strategies.create(body.name, body.definition, body.description)
+
+    @app.post("/strategies/from-rules", dependencies=a, status_code=201)
+    def strategy_from_rules(body: StrategyFromRulesIn):
+        return svc.strategies.from_approved_rules(body.name, body.source_id, body.item_ids, body.duration_sec)
+
+    @app.get("/strategies/{sid}", dependencies=a)
+    def get_strategy(sid: int):
+        return svc.strategies.get(sid)
+
+    @app.patch("/strategies/{sid}", dependencies=a)
+    def patch_strategy(sid: int, patch: dict[str, Any]):
+        return svc.strategies.update(sid, patch)
+
+    @app.delete("/strategies/{sid}", dependencies=a)
+    def delete_strategy(sid: int):
+        svc.strategies.delete(sid)
+        return {"deleted": sid}
+
+    @app.post("/strategies/{sid}/adopt-rules", dependencies=a)
+    def adopt_rules(sid: int, duration_sec: int = 120):
+        """Give a video/document draft a testable definition from its approved rules."""
+        return svc.strategies.adopt_video_draft(sid, duration_sec)
+
+    @app.post("/strategies/{sid}/backtest", dependencies=a)
+    def backtest(sid: int, body: BacktestIn):
+        return svc.strategies.backtest(sid, body.dataset_id, body.payout, body.in_sample)
+
+    @app.post("/strategies/{sid}/approve", dependencies=a)
+    def approve_strategy(sid: int):
+        """User action. Refused (409) unless the current version passed an out-of-sample test on real data."""
+        return svc.strategies.approve(sid)
+
+    @app.post("/strategies/{sid}/retire", dependencies=a)
+    def retire_strategy(sid: int):
+        return svc.strategies.retire(sid)
+
+    @app.post("/strategies/compare", dependencies=a)
+    def compare_strategies(body: CompareIn):
+        return svc.strategies.compare(body.strategy_ids, body.dataset_id, body.payout)
+
+    @app.get("/strategies/suitable/{market_condition}", dependencies=a)
+    def suitable_strategies(market_condition: str):
+        return svc.strategies.suitable(market_condition)
+
+    @app.get("/datasets", dependencies=a)
+    def list_datasets():
+        return svc.strategies.list_datasets()
+
+    @app.post("/datasets/csv", dependencies=a, status_code=201)
+    def import_dataset(file: UploadFile = File(...), name: str | None = Form(None), asset: str | None = Form(None)):
+        text = file.file.read().decode("utf-8-sig", errors="replace")
+        return svc.strategies.import_csv(name or file.filename or "dataset", text, asset)
+
+    @app.post("/datasets/synthetic", dependencies=a, status_code=201)
+    def synthetic_dataset(body: SyntheticIn):
+        return svc.strategies.create_synthetic(body.rows, body.timeframe_sec, body.seed)
+
+    @app.delete("/datasets/{did}", dependencies=a)
+    def delete_dataset(did: int):
+        svc.strategies.delete_dataset(did)
+        return {"deleted": did}
 
     # ------------------------------------------------------------ videos (Phase 6)
     @app.get("/videos", dependencies=a)

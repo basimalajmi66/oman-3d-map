@@ -8,9 +8,11 @@ library;
 typedef Json = Map<String, dynamic>;
 
 class EngineException implements Exception {
-  EngineException(this.statusCode, this.message);
+  EngineException(this.statusCode, this.message, {this.reasons = const []});
   final int statusCode;
   final String message;
+  /// Machine-readable reasons (e.g. why a strategy does not qualify for approval).
+  final List<String> reasons;
 
   bool get isPermission => statusCode == 403;
   bool get isOffline => statusCode == 0;
@@ -68,6 +70,23 @@ abstract class EngineApi {
   /// Learning reports: what the system extracted from each source, awaiting your decision.
   Future<List<Json>> listReports({String? status});
   Future<Json> decideReport(int reportId, String decision);
+
+  // strategies & training (Phase 7)
+  Future<List<Json>> strategyCatalog();
+  Future<List<Json>> listStrategies();
+  Future<Json> getStrategy(int id);
+  Future<Json> createStrategy(String name, Json definition, {String description = ''});
+  Future<Json> updateStrategy(int id, Json patch);
+  Future<void> deleteStrategy(int id);
+  Future<Json> backtest(int strategyId, int datasetId, {double payout = 0.85, double inSample = 0.7});
+  /// Throws EngineException(409, reasons: [...]) when the strategy does not qualify.
+  Future<Json> approveStrategy(int id);
+  Future<Json> retireStrategy(int id);
+  Future<List<Json>> compareStrategies(List<int> ids, int datasetId, {double payout = 0.85});
+  Future<List<Json>> listDatasets();
+  Future<Json> importDataset(UploadFile csv, {String? name, String? asset});
+  Future<Json> syntheticDataset({int rows = 3000, int timeframeSec = 30, int seed = 0});
+  Future<void> deleteDataset(int id);
 
   // educational videos (Phase 6)
   Future<List<Json>> listVideos();

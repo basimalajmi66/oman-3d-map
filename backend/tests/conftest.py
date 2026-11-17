@@ -43,7 +43,13 @@ def capturer():
 
 @pytest.fixture
 def app(paths, capturer):
-    return create_app(paths, token=TOKEN, capturer=capturer)
+    application = create_app(paths, token=TOKEN, capturer=capturer)
+    yield application
+    # stop background work so it cannot leak CPU into later tests
+    svc = application.state.services
+    svc.watcher.stop()
+    for sid in list(svc.videos._queue) + ([svc.videos._running] if svc.videos._running else []):
+        svc.videos.wait(sid, 120)
 
 
 @pytest.fixture
