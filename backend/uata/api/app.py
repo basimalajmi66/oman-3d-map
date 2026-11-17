@@ -57,10 +57,11 @@ def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
     db = Database(paths.db_file)
     db.migrate()
     _restrict_permissions(paths.db_file, 0o600)
-    chart_inputs = ChartInputService(db, paths.files_dir)
+    knowledge = KnowledgeService(db, paths.files_dir)
+    chart_inputs = ChartInputService(db, paths.files_dir, knowledge=knowledge)
     watcher = ScreenWatcher(capturer or MssCapturer(), chart_inputs.read_only)
     return Services(paths, db, SettingsService(db), ControlService(db, watcher),
-                    KnowledgeService(db, paths.files_dir), RecordsService(db), BackupService(db, paths),
+                    knowledge, RecordsService(db), BackupService(db, paths),
                     chart_inputs, watcher)
 
 
@@ -353,6 +354,19 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
     def link_item(item_id: int, body: LinkIn):
         svc.knowledge.link_items(item_id, body.to_item_id, body.relation)
         return {"linked": True}
+
+    @app.get("/knowledge/reports", dependencies=a)
+    def list_reports(status: str | None = None, limit: int = Query(100, le=500)):
+        return svc.knowledge.list_reports(status, limit)
+
+    @app.post("/knowledge/reports/{report_id}/decision", dependencies=a)
+    def decide_report(report_id: int, body: DecisionIn):
+        return svc.knowledge.decide_report(report_id, body.decision)
+
+    @app.get("/knowledge/retrieve", dependencies=a)
+    def retrieve(q: str, approved_only: bool = True, k: int = Query(8, le=50)):
+        """RAG retrieval used by the analysis engine (approved knowledge only by default)."""
+        return svc.knowledge.retrieve(q, approved_only, k)
 
     @app.get("/knowledge/search", dependencies=a)
     def search(q: str, approved_only: bool = False, limit: int = Query(20, le=100)):

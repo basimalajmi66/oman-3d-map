@@ -158,7 +158,13 @@ class FakeEngine implements EngineApi {
     'patterns': <String>[], 'warnings': ['no_volume_data'],
   };
 
+  List<Json> knowledge = [
+    {'item_id': 501, 'title': 'Trend rule', 'snippet': 'Trade with the trend', 'location': 'p.2', 'source_id': 9,
+      'source_title': 'strategy.pdf', 'item_type': 'rule', 'score': 0.03},
+  ];
+
   Json _analysis() => {
+        'knowledge': knowledge,
         'technical': technical,
         'signal': 'WAIT',
         'reason_code': reading['usable'] == true ? 'signal_engine_not_installed' : 'image_quality_insufficient',
@@ -255,6 +261,21 @@ class FakeEngine implements EngineApi {
             if ((i['content'] as String).contains(query))
               {...i.cast<String, dynamic>(), 'source_title': s['title'], 'snippet': i['content']}
       ];
+
+  // ---------------------------------------------------------------- learning reports
+  List<Json> reports = [];
+
+  @override
+  Future<List<Json>> listReports({String? status}) async =>
+      reports.where((r) => status == null || r['status'] == status).toList();
+
+  @override
+  Future<Json> decideReport(int reportId, String decision) async {
+    calls.add('report:$decision:$reportId');
+    final r = reports.firstWhere((r) => r['id'] == reportId);
+    r['status'] = decision == 'approve' ? 'approved' : 'rejected';
+    return r;
+  }
 
   // ---------------------------------------------------------------- records
   @override

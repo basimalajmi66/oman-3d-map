@@ -5,10 +5,13 @@ knowledge extracted from it becomes *items* in ``pending_review``. Only items th
 user explicitly approves are ever visible to the analysis engine
 (``search(..., approved_only=True)``).
 
-Phase 1 extraction support: notes, TXT/MD/CSV (plain text). PDF, DOCX, XLSX,
-images and videos are stored, hashed and catalogued now; their content
-extraction is implemented in Phases 3, 5 and 6 and is reported as
-``unsupported_yet`` instead of being silently ignored.
+Extraction (Phase 5): notes, TXT/MD/CSV, PDF, DOCX, XLSX and text in images
+(OCR) — each chunk keeps its location in the source. Videos are stored now and
+analysed in Phase 6 (``unsupported_yet``).
+
+Every source produces a *learning report* (what was extracted, candidate rules,
+detected conflicts with approved rules). Approving the report approves its
+items; nothing is used by the engine before that.
 """
 
 from __future__ import annotations
@@ -22,6 +25,10 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from uata.db.database import Database, audit, row_to_dict, utcnow
+from uata.knowledge import extract as kx
+from uata.knowledge.retrieval import Retriever
+from uata.knowledge.rules import CandidateRule, conflicts, extract_rules
+from uata.knowledge.textnorm import concepts
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024  # 2 GiB (videos)
 CHUNK_CHARS = 1500
@@ -32,7 +39,7 @@ EXT_KIND = {
     ".png": "image", ".jpg": "image", ".jpeg": "image", ".webp": "image", ".bmp": "image",
     ".mp4": "video", ".mkv": "video", ".mov": "video", ".avi": "video", ".webm": "video",
 }
-TEXT_KINDS = {"txt"}
+EXTRACTABLE = set(kx.EXTRACTORS)  # txt, pdf, docx, xlsx, image
 ITEM_TYPES = ("note", "rule", "strategy_fragment", "example", "definition")
 
 
@@ -77,9 +84,97 @@ def fts_query(text: str) -> str | None:
 
 
 class KnowledgeService:
-    def __init__(self, db: Database, files_dir: Path):
+    def __init__(self, db: Database, files_dir: Path, retriever: Retriever | None = None):
         self.db = db
         self.files_dir = Path(files_dir)
+        self.retriever = retriever or Retriever()
+        with self.db.session() as conn:  # items created before Phase 5 get indexed once
+            self.retriever.reindex_missing(conn, utcnow())
+
+    # ------------------------------------------------------------ ingestion (Phase 5)
+    def _ingest(self, conn, sid: int, chunks: list[kx.Chunk], base_title: str, category: str | None,
+                tags_json: str, now: str, item_type: str = "note") -> dict[str, Any]:
+        """Store chunks as items, extract candidate rules, index everything, write the learning report."""
+        item_ids, rules = [], []
+        for i, ch in enumerate(chunks):
+            title = base_title if len(chunks) == 1 else f"{base_title} — {ch.location}"
+            iid = conn.execute(
+                "INSERT INTO knowledge_items(source_id,item_type,title,content,category,tags_json,location,"
+                "created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (sid, item_type, title, ch.text, category, tags_json, ch.location, now, now)).lastrowid
+            item_ids.append(iid)
+            self.retriever.index_item(conn, iid, f"{title}\n{ch.text}", now)
+            rules.extend(extract_rules(ch.text, ch.location))
+
+        approved = [
+            {"item_id": r["id"], "text": r["content"], **json.loads(r["rule_json"])}
+            for r in conn.execute("SELECT id, content, rule_json FROM knowledge_items "
+                                  "WHERE status='approved' AND rule_json IS NOT NULL").fetchall()]
+        found_conflicts, rule_entries = [], []
+        for r in rules:
+            iid = conn.execute(
+                "INSERT INTO knowledge_items(source_id,item_type,title,content,category,tags_json,location,"
+                "rule_json,created_at,updated_at) VALUES (?,'rule',?,?,?,?,?,?,?,?)",
+                (sid, f"{base_title} — rule ({r.location})", r.text, category, tags_json, r.location,
+                 json.dumps({"actions": r.actions, "conditions": r.conditions, "timeframes": r.timeframes},
+                            ensure_ascii=False), now, now)).lastrowid
+            self.retriever.index_item(conn, iid, r.text, now)
+            c = conflicts(r, approved)
+            for x in c:
+                x["new_item_id"] = iid
+            found_conflicts.extend(c)
+            rule_entries.append({"item_id": iid, **r.to_dict()})
+
+        all_text = "\n".join(ch.text for ch in chunks)
+        found_concepts = sorted(c for c in concepts(all_text) if not c.startswith("act_"))
+        summary = (f"{len(chunks)} section(s), {len(rules)} candidate rule(s), "
+                   f"{len(found_conflicts)} conflict(s) with approved knowledge")
+        extracted = {"chunks": len(chunks), "items": item_ids, "rules": rule_entries, "concepts": found_concepts,
+                     "locations": [ch.location for ch in chunks][:50], "characters": len(all_text)}
+        rid = conn.execute(
+            "INSERT INTO learning_reports(source_id,summary,extracted_json,conflicts_json,status,created_at) "
+            "VALUES (?,?,?,?,'pending_review',?)",
+            (sid, summary, json.dumps(extracted, ensure_ascii=False),
+             json.dumps(found_conflicts, ensure_ascii=False), now)).lastrowid
+        return {"report_id": rid, "rules": len(rules), "conflicts": len(found_conflicts)}
+
+    # ------------------------------------------------------------ learning reports
+    def list_reports(self, status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        sql = ("SELECT r.*, s.title AS source_title, s.kind AS source_kind FROM learning_reports r "
+               "LEFT JOIN knowledge_sources s ON s.id=r.source_id")
+        args: list[Any] = []
+        if status:
+            sql += " WHERE r.status=?"
+            args.append(status)
+        sql += " ORDER BY r.id DESC LIMIT ?"
+        args.append(limit)
+        with self.db.session() as conn:
+            return [row_to_dict(r) for r in conn.execute(sql, args).fetchall()]
+
+    def decide_report(self, report_id: int, decision: str) -> dict[str, Any]:
+        """Approve or reject everything a source taught (items still pending). User action only."""
+        status = {"approve": "approved", "reject": "rejected"}.get(decision)
+        if status is None:
+            raise ValueError("decision must be 'approve' or 'reject'")
+        now = utcnow()
+        with self.db.session() as conn:
+            row = conn.execute("SELECT source_id, status FROM learning_reports WHERE id=?", (report_id,)).fetchone()
+            if row is None:
+                raise NotFound(f"report {report_id}")
+            conn.execute("UPDATE learning_reports SET status=?, decided_at=? WHERE id=?", (status, now, report_id))
+            n = conn.execute(
+                "UPDATE knowledge_items SET status=?, decided_at=?, updated_at=? "
+                "WHERE source_id=? AND status='pending_review'", (status, now, now, row["source_id"])).rowcount
+            audit(conn, "user", f"knowledge.report_{decision}", report_id=report_id, items=n)
+            out = row_to_dict(conn.execute(
+                "SELECT r.*, s.title AS source_title FROM learning_reports r LEFT JOIN knowledge_sources s "
+                "ON s.id=r.source_id WHERE r.id=?", (report_id,)).fetchone())
+        out["items_updated"] = n
+        return out
+
+    def retrieve(self, query: str, approved_only: bool = True, k: int = 8) -> list[dict[str, Any]]:
+        with self.db.session() as conn:
+            return self.retriever.search(conn, query, approved_only, k)
 
     # ------------------------------------------------------------ sources
     def add_note(self, title: str, content: str, category: str | None = None,
@@ -95,10 +190,8 @@ class KnowledgeService:
                 "INSERT INTO knowledge_sources(kind,title,category,tags_json,extraction_status,"
                 "extracted_text,created_at,updated_at) VALUES ('note',?,?,?, 'done', ?,?,?)",
                 (title.strip(), category, tags_json, content, now, now)).lastrowid
-            conn.execute(
-                "INSERT INTO knowledge_items(source_id,item_type,title,content,category,tags_json,"
-                "created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
-                (sid, item_type, title.strip(), content.strip(), category, tags_json, now, now))
+            self._ingest(conn, sid, [kx.Chunk(content.strip(), "note")], title.strip(), category, tags_json, now,
+                         item_type=item_type)
             audit(conn, "user", "knowledge.add_note", source_id=sid)
         return self.get_source(sid)
 
@@ -145,13 +238,15 @@ class KnowledgeService:
         finally:
             tmp.unlink(missing_ok=True)
 
-        text, status = None, "unsupported_yet"
-        if kind in TEXT_KINDS:
+        chunks: list[kx.Chunk] = []
+        status, error = "unsupported_yet", None
+        if kind in EXTRACTABLE:
             try:
-                text = dest.read_bytes().decode("utf-8-sig")
+                chunks = kx.extract(kind, dest)
                 status = "done"
-            except UnicodeDecodeError:
-                status = "failed"
+            except kx.ExtractionError as e:
+                status, error = "failed", str(e)
+        text = "\n\n".join(ch.text for ch in chunks) or None
 
         now = utcnow()
         tags_json = json.dumps(tags or [], ensure_ascii=False)
@@ -162,12 +257,11 @@ class KnowledgeService:
                 " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (kind, title or safe_name, safe_name, mimetypes.guess_type(safe_name)[0], digest, rel,
                  size, category, tags_json, status, text, now, now)).lastrowid
-            for i, chunk in enumerate(chunk_text(text or "")):
-                conn.execute(
-                    "INSERT INTO knowledge_items(source_id,item_type,title,content,category,tags_json,"
-                    "created_at,updated_at) VALUES (?,'note',?,?,?,?,?,?)",
-                    (sid, f"{title or safe_name} §{i + 1}", chunk, category, tags_json, now, now))
-            audit(conn, "user", "knowledge.add_file", source_id=sid, kind=kind, size=size)
+            if error:
+                conn.execute("UPDATE knowledge_sources SET notes=? WHERE id=?", (f"extraction: {error}", sid))
+            if chunks:
+                self._ingest(conn, sid, chunks, title or safe_name, category, tags_json, now)
+            audit(conn, "user", "knowledge.add_file", source_id=sid, kind=kind, size=size, extraction=status)
         return self.get_source(sid)
 
     def list_sources(self, kind: str | None = None, category: str | None = None,
@@ -195,8 +289,11 @@ class KnowledgeService:
                 raise NotFound(f"source {source_id}")
             items = conn.execute(
                 "SELECT * FROM knowledge_items WHERE source_id=? ORDER BY id", (source_id,)).fetchall()
+            report = conn.execute("SELECT * FROM learning_reports WHERE source_id=? ORDER BY id DESC LIMIT 1",
+                                  (source_id,)).fetchone()
         src = self._public_source(row_to_dict(row))
         src["items"] = [row_to_dict(i) for i in items]
+        src["report"] = row_to_dict(report) if report else None
         return src
 
     def update_source(self, source_id: int, patch: dict[str, Any]) -> dict[str, Any]:
@@ -277,6 +374,8 @@ class KnowledgeService:
                 raise NotFound(f"item {item_id}")
             audit(conn, "user", "knowledge.update_item", item_id=item_id, fields=sorted(patch))
             row = conn.execute("SELECT * FROM knowledge_items WHERE id=?", (item_id,)).fetchone()
+            if row is not None and {"content", "title"} & set(patch):
+                self.retriever.index_item(conn, item_id, f"{row['title']}\n{row['content']}", utcnow())
         if row is None:
             raise NotFound(f"item {item_id}")
         return row_to_dict(row)
@@ -304,19 +403,13 @@ class KnowledgeService:
             audit(conn, "user", "knowledge.link", from_id=from_id, to_id=to_id, relation=relation)
 
     def search(self, query: str, approved_only: bool = False, limit: int = 20) -> list[dict[str, Any]]:
-        """Keyword search (FTS5/BM25). Vector search is added in Phase 5."""
-        q = fts_query(query)
-        if q is None:
+        """Hybrid keyword + vector search (Arabic/English concepts bridged)."""
+        if not query.strip():
             return []
-        sql = ("SELECT i.*, s.title AS source_title, s.kind AS source_kind, bm25(knowledge_items_fts) AS score, "
-               "snippet(knowledge_items_fts, 1, '[', ']', '…', 12) AS snippet "
-               "FROM knowledge_items_fts JOIN knowledge_items i ON i.id = knowledge_items_fts.rowid "
-               "LEFT JOIN knowledge_sources s ON s.id = i.source_id WHERE knowledge_items_fts MATCH ?")
-        if approved_only:
-            sql += " AND i.status='approved'"
-        sql += " ORDER BY score LIMIT ?"
-        with self.db.session() as conn:
-            return [row_to_dict(r) for r in conn.execute(sql, (q, limit)).fetchall()]
+        hits = self.retrieve(query, approved_only, limit)
+        for h in hits:  # keep the field names the UI already uses
+            h["id"], h["content"] = h["item_id"], h["snippet"]
+        return hits
 
     @staticmethod
     def _public_source(d: dict[str, Any] | None) -> dict[str, Any]:

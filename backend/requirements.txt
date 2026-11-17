@@ -7,3 +7,6 @@ numpy>=1.26
 opencv-python-headless>=4.9
 pytesseract>=0.3.10
 mss>=9.0
+pypdf>=4
+python-docx>=1.1
+openpyxl>=3.1

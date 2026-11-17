@@ -51,7 +51,11 @@ def test_upload_text_file_extracts_and_chunks(client, paths):
 def test_upload_binary_formats_are_stored_and_flagged(client):
     r = client.post("/knowledge/files", files={"file": ("book.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")})
     src = r.json()
-    assert src["kind"] == "pdf" and src["extraction_status"] == "unsupported_yet" and src["items"] == []
+    # a broken PDF is stored but marked failed, with the reason (nothing silently ignored)
+    assert src["kind"] == "pdf" and src["extraction_status"] == "failed" and src["items"] == []
+    assert src["notes"].startswith("extraction:")
+    v = client.post("/knowledge/files", files={"file": ("lesson.mp4", io.BytesIO(b"\x00\x00\x00\x18ftypmp42"))}).json()
+    assert v["kind"] == "video" and v["extraction_status"] == "unsupported_yet"  # Phase 6
 
 
 def test_duplicate_upload_detected(client):

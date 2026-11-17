@@ -7,3 +7,6 @@ python-multipart
 cryptography
 numpy
 opencv-python
+pypdf
+python-docx
+openpyxl

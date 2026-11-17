@@ -2,13 +2,13 @@ import sqlite3
 
 import pytest
 
-from uata.db.database import Database
+from uata.db.database import MIGRATIONS, Database
 
 
 def test_migrate_is_idempotent(tmp_path):
     db = Database(tmp_path / "x.sqlite3")
-    assert db.migrate() == 3
-    assert db.migrate() == 3
+    assert db.migrate() == max(MIGRATIONS)
+    assert db.migrate() == max(MIGRATIONS)
     assert db.integrity_ok()
 
 
@@ -69,8 +69,8 @@ def test_upgrade_from_v1_database(tmp_path, monkeypatch):
     assert old.migrate() == 1
     with old.session() as conn:
         conn.execute("INSERT INTO settings VALUES ('k','\"kept\"','t')")
-    monkeypatch.setattr(dbmod, "MIGRATIONS", [1, 2, 3])
-    assert Database(path).migrate() == 3
+    monkeypatch.setattr(dbmod, "MIGRATIONS", list(MIGRATIONS))
+    assert Database(path).migrate() == max(MIGRATIONS)
     with Database(path).session() as conn:
         assert conn.execute("SELECT value_json FROM settings WHERE key='k'").fetchone()[0] == '"kept"'
         conn.execute("SELECT count(*) FROM analysis_inputs").fetchone()

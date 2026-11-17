@@ -163,6 +163,12 @@ class HttpEngineApi implements EngineApi {
       _list(await _get('/knowledge/search', {'q': query, 'approved_only': '$approvedOnly'}));
 
   @override
+  Future<List<Json>> listReports({String? status}) async => _list(await _get('/knowledge/reports', {'status': status}));
+  @override
+  Future<Json> decideReport(int reportId, String decision) async =>
+      _map(await _post('/knowledge/reports/$reportId/decision', {'decision': decision}));
+
+  @override
   Future<List<Json>> listSignals({int limit = 100}) async => _list(await _get('/signals', {'limit': '$limit'}));
   @override
   Future<Json> summary() async => _map(await _get('/stats/summary'));

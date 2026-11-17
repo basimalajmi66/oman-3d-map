@@ -53,6 +53,7 @@ class ScreenWatcher:
                             "data_quality": reading["data_quality"],
                             "usable": reading["usable"],
                             "technical": technical_summary(reading.get("technical")),
+                            "knowledge": reading.get("knowledge", [])[:3],
                         }
                         self.frames += 1
                         self.error = None

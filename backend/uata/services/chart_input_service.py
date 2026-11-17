@@ -39,10 +39,21 @@ class InvalidImage(ValueError):
 
 
 class ChartInputService:
-    def __init__(self, db: Database, files_dir: Path, reader: ChartReader | None = None):
+    def __init__(self, db: Database, files_dir: Path, reader: ChartReader | None = None, knowledge=None):
         self.db = db
         self.files_dir = Path(files_dir)
         self.reader = reader or ChartReader()
+        self.knowledge = knowledge  # KnowledgeService for RAG (optional)
+
+    def _related_knowledge(self, technical: dict | None) -> list[dict]:
+        """Approved library passages relevant to what the chart shows (RAG, local)."""
+        if self.knowledge is None or not technical or not technical.get("available"):
+            return []
+        q = knowledge_query(technical)
+        if not q:
+            return []
+        return [{k: h[k] for k in ("item_id", "title", "snippet", "location", "source_id", "source_title",
+                                   "item_type", "score")} for h in self.knowledge.retrieve(q, True, 5)]
 
     def submit(self, stream: BinaryIO, filename: str | None, input_mode: str,
                screen_capture_allowed: bool, session_id: int | None = None,
@@ -71,6 +82,7 @@ class ChartInputService:
         """Read + analyse a chart without storing anything (continuous screen reading)."""
         reading = self._reader(min_quality).read(img).to_dict()
         reading["technical"] = analyze_reading(reading, enabled)
+        reading["knowledge"] = self._related_knowledge(reading["technical"])
         return reading
 
     def _reader(self, min_quality: float | None) -> ChartReader:
@@ -102,6 +114,7 @@ class ChartInputService:
 
         reading = self._reader(min_quality).read(img).to_dict()
         reading["technical"] = analyze_reading(reading, enabled)  # Phase 4: closed candles only
+        reading["knowledge"] = self._related_knowledge(reading["technical"])  # Phase 5: approved only
 
         with self.db.session() as conn:
             iid = conn.execute(
@@ -181,7 +194,26 @@ def analysis_from_reading(reading: dict, width: int, height: int) -> dict[str, A
         "image": {"width": width, "height": height},
         "reading": reading["summary"],
         "technical": technical_summary(reading.get("technical")),
+        "knowledge": reading.get("knowledge", []),
     }
+
+
+def knowledge_query(technical: dict) -> str:
+    """Build a retrieval query from the directional factors and patterns of the analysis."""
+    from uata.knowledge.textnorm import FACTOR_CONCEPTS, surface_forms
+    cs: list[str] = []
+    for f in technical.get("factors", []):
+        if f.get("enabled") and f.get("available") and f.get("direction") != "neutral":
+            cs += FACTOR_CONCEPTS.get(f["code"], []) or FACTOR_CONCEPTS.get(f["name"], [])
+    for p in technical.get("patterns", []):
+        cs += FACTOR_CONCEPTS.get(f"pattern_{p['name']}", [])
+    trend = technical.get("trend", {}).get("direction")
+    if trend in ("up", "down"):
+        cs.append("uptrend" if trend == "up" else "downtrend")
+    words: list[str] = []
+    for c in dict.fromkeys(cs):
+        words += surface_forms(c)[:2]
+    return " ".join(words)
 
 
 def technical_summary(t: dict | None) -> dict | None:

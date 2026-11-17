@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/engine_api.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
+import 'learning_reports_screen.dart';
 
 /// Picks a file from the device. Replaceable in tests.
 typedef FilePickFn = Future<UploadFile?> Function();
@@ -168,6 +169,15 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
         IconButton(key: const Key('add_note'), tooltip: app.t('add_note'), icon: const Icon(Icons.note_add_outlined), onPressed: _addNote),
         IconButton(key: const Key('add_file'), tooltip: app.t('add_file'), icon: const Icon(Icons.upload_file), onPressed: _addFile),
         IconButton(key: const Key('add_url'), tooltip: app.t('add_url'), icon: const Icon(Icons.link), onPressed: _addUrl),
+        IconButton(
+          key: const Key('open_reports'),
+          tooltip: app.t('learning_reports'),
+          icon: const Icon(Icons.fact_check_outlined),
+          onPressed: () async {
+            await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LearningReportsScreen()));
+            await _reload();
+          },
+        ),
       ]),
       body: LayoutBuilder(builder: (context, c) {
         final wide = c.maxWidth >= 760;
@@ -233,7 +243,9 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
       children: _hits!
           .map((h) => ListTile(
                 title: Text(h['title'] as String? ?? ''),
-                subtitle: Text('${h['snippet'] ?? ''}\n${app.t('source')}: ${h['source_title'] ?? '—'} · ${app.t(h['status'] as String)}',
+                subtitle: Text(
+                    '${h['snippet'] ?? ''}\n${app.t('source')}: ${h['source_title'] ?? '—'}'
+                    '${h['location'] != null ? ' (${h['location']})' : ''} · ${app.t(h['status'] as String)}',
                     maxLines: 3),
                 isThreeLine: true,
                 onTap: h['source_id'] == null ? null : () => _select(h['source_id'] as int),
@@ -260,6 +272,9 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
         if (s['original_name'] != null) Text('${app.t('source')}: ${s['original_name']} (${fmtBytes(s['size_bytes'] as num?)})'),
         if (s['url'] != null) SelectableText('URL: ${s['url']}'),
         Text('${app.t('extraction')}: ${app.t('extraction_${s['extraction_status']}')}'),
+        if (s['notes'] != null) Text('${s['notes']}', style: const TextStyle(fontSize: 12, color: SignalColors.wait)),
+        if (s['report'] is Map) Text('${app.t('learning_reports')}: ${(s['report'] as Map)['summary']}',
+            key: const Key('source_report_summary'), style: const TextStyle(fontSize: 12)),
       ]),
       const Divider(height: 24),
       Text(app.t('items'), style: Theme.of(context).textTheme.titleMedium),
@@ -279,7 +294,9 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
                     },
                   ),
                 ]),
-                Text('${app.t('type')}: ${app.t('it_${it['item_type']}')}', style: const TextStyle(fontSize: 12)),
+                Text('${app.t('type')}: ${app.t('it_${it['item_type']}')}'
+                    '${it['location'] != null ? '  ·  ${app.t('location')}: ${it['location']}' : ''}',
+                    style: const TextStyle(fontSize: 12)),
                 const SizedBox(height: 6),
                 SelectableText(it['content'] as String? ?? ''),
                 const SizedBox(height: 6),

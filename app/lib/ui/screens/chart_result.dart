@@ -47,6 +47,7 @@ Future<void> showChartResult(BuildContext context, Json result) {
               _AnnotatedPreview(app: app, inputId: input['id'] as int),
             ],
             if (analysis['technical'] is Map) ...technicalLines(app, (analysis['technical'] as Map).cast<String, dynamic>()),
+            if (analysis['knowledge'] is List) ...knowledgeLines(app, (analysis['knowledge'] as List).cast<Map>()),
           ]),
         ),
       ),
@@ -175,3 +176,21 @@ List<Widget> technicalLines(AppState app, Json t) {
     Text(app.t('technical_not_signal'), style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
   ];
 }
+
+/// Approved library passages relevant to this chart (RAG), with source and location.
+List<Widget> knowledgeLines(AppState app, List<Map> hits) => [
+      const Divider(height: 20),
+      Text(app.t('related_knowledge'), style: const TextStyle(fontWeight: FontWeight.bold)),
+      if (hits.isEmpty) Text(app.t('no_related_knowledge'), key: const Key('no_related_knowledge'), style: const TextStyle(fontSize: 12)),
+      ...hits.map((h) => Padding(
+            key: Key('knowledge_${h['item_id']}'),
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '• ${h['title']}: ${h['snippet']}\n   ${app.t('source')}: ${h['source_title'] ?? '—'}'
+              '${h['location'] != null ? ' (${h['location']})' : ''}',
+              style: const TextStyle(fontSize: 12),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
+          )),
+    ];

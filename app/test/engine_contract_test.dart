@@ -141,6 +141,20 @@ void main() {
     expect(png.take(4), [0x89, 0x50, 0x4E, 0x47]);
   }, skip: skip);
 
+  test('phase 5: note with a rule → learning report → approve → bilingual search', () async {
+    final note = await api.addNote(title: 'قاعدة الارتداد', content: 'إذا كان مؤشر القوة النسبية في التشبع البيعي عند الدعم فادخل شراء.');
+    final report = note['report'] as Map;
+    expect(report['status'], 'pending_review');
+    expect(((report['extracted'] as Map)['rules'] as List), hasLength(1));
+    final pending = await api.listReports(status: 'pending_review');
+    expect(pending.map((r) => r['id']), contains(report['id']));
+    expect(await api.search('RSI oversold', approvedOnly: true), isEmpty); // not approved yet
+    final decided = await api.decideReport(report['id'] as int, 'approve');
+    expect(decided['status'], 'approved');
+    final hits = await api.search('RSI oversold', approvedOnly: true); // English query, Arabic note
+    expect(hits.first['source_title'], 'قاعدة الارتداد');
+  }, skip: skip);
+
   test('token is required', () async {
     final bad = HttpEngineApi(baseUrl: api.baseUrl, tokenProvider: () async => 'wrong');
     await expectLater(bad.getSettings(), throwsA(predicate((e) => e is EngineException && e.statusCode == 401)));

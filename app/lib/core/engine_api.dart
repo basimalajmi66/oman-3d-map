@@ -65,6 +65,9 @@ abstract class EngineApi {
   Future<Json> uploadFile(UploadFile file, {String? title, String? category, List<String> tags = const []});
   Future<Json> decideItem(int itemId, String decision);
   Future<List<Json>> search(String query, {bool approvedOnly = false});
+  /// Learning reports: what the system extracted from each source, awaiting your decision.
+  Future<List<Json>> listReports({String? status});
+  Future<Json> decideReport(int reportId, String decision);
 
   // signals & results
   Future<List<Json>> listSignals({int limit = 100});

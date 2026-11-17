@@ -17,7 +17,7 @@ ENGINE_COMPONENTS = {
     # name: available-in-this-build
     "chart_vision": True,        # Phase 3 ✔
     "technical_analysis": True,  # Phase 4 ✔
-    "knowledge_rag": False,      # Phase 5 (Phase 1 provides keyword search only)
+    "knowledge_rag": True,       # Phase 5 ✔
     "video_learning": False,     # Phase 6
     "strategy_engine": False,    # Phase 7
     "signal_engine": False,      # Phase 8

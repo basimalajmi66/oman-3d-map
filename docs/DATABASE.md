@@ -1,7 +1,7 @@
 # قاعدة البيانات المحلية
 
 * المحرك: SQLite بوضع WAL و`synchronous=NORMAL` — البيانات المؤكدة لا تضيع عند إغلاق البرنامج أو انقطاعه.
-* المخطط: `backend/uata/db/schema_v1.sql` و`schema_v2.sql` (المرحلة 2) و`schema_v3.sql` (المرحلة 3: حفظ قراءة الشارت مع كل صورة). الترحيلات مرقمة في `MIGRATIONS` وتُسجَّل في `schema_migrations`، وتُطبَّق تلقائياً عند التشغيل وبعد استعادة نسخة أقدم.
+* المخطط: `backend/uata/db/schema_v1.sql` و`schema_v2.sql` (المرحلة 2) و`schema_v3.sql` (المرحلة 3: حفظ قراءة الشارت مع كل صورة) و`schema_v4.sql` (المرحلة 5: `location` و`rule_json` لعناصر المعرفة). الترحيلات مرقمة في `MIGRATIONS` وتُسجَّل في `schema_migrations`، وتُطبَّق تلقائياً عند التشغيل وبعد استعادة نسخة أقدم.
 * كل اتصال قصير العمر داخل معاملة `BEGIN IMMEDIATE` (آمن مع خيوط FastAPI).
 * الأعمدة المنتهية بـ `_json` تُفك تلقائياً (`tags_json` ← `tags`).
 
@@ -14,7 +14,7 @@
 | `knowledge_items` | وحدة معرفة واحدة مستخرجة من مصدر | `status ∈ pending_review/approved/rejected/archived`؛ `video_timestamp_ms` لربط المعلومة بتوقيت الفيديو؛ `clarity ∈ [0,1]` |
 | `knowledge_items_fts` | فهرس بحث نصي FTS5 (unicode61 يدعم العربية) | متزامن بمشغلات insert/update/delete |
 | `knowledge_links` | ربط المعلومات: related/supports/contradicts/refines/example_of | يمنع ربط العنصر بنفسه |
-| `knowledge_embeddings` | متجهات البحث الدلالي المحلي (المرحلة 5) | float32 BLOB |
+| `knowledge_embeddings` | متجهات البحث المحلي (تضمين `hashing-v1`، 2048 بُعداً) لكل عنصر، تُعاد عند تعديل المحتوى أو تغيير النموذج | float32 BLOB |
 | `learning_reports` | تقرير "ما تعلمه النظام" + التعارضات، ينتظر الموافقة | `status` |
 | `strategies` | بطاقة الاستراتيجية: شروط الدخول/الخروج/الامتناع، الأطر، ظروف السوق، المؤشرات، الإصدار | اسم فريد؛ `status ∈ draft/testing/approved/retired` |
 | `strategy_examples` | أمثلة ناجحة/فاشلة | `outcome ∈ success/failure` |
