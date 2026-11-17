@@ -57,10 +57,14 @@ cd app && flutter build apk --debug --target-platform android-arm64,android-x64
 
 ## بناء نسخة Windows كاملة
 ```powershell
-./scripts/build_windows.ps1
-# الناتج: app\build\windows\x64\runner\Release\uata_app.exe + engine\uata-engine.exe
+./scripts/build_windows.ps1                                  # مجلد Release فقط
+./scripts/build_windows.ps1 -BundleTesseract -Installer      # + Tesseract (عربي/إنجليزي) + مثبّت Inno Setup
+# الناتج: installer\Output\UATA-Setup-<version>.exe
 ```
-يبني CI (GitHub Actions) نفس النسخة على `windows-latest` ويرفعها كـ artifact باسم `uata-windows`.
+* المثبّت للمستخدم الحالي (`%LOCALAPPDATA%\Programs\UATA`) ولا يحتاج صلاحيات مسؤول، ويضيف اختصاراً في قائمة ابدأ.
+* إلغاء التثبيت يوقف المحرك ويحذف البرنامج، **ويُبقي بياناتك** (قاعدة البيانات والنسخ) — احذفها من الإعدادات ← حذف كل البيانات إن أردت.
+* يبني CI المثبّت على `windows-latest`، **يثبّته بصمت، يشغّل المحرك من مجلد التثبيت ويتحقق أن OCR بالعربية وFFmpeg يعملان، ثم يلغي التثبيت**، ويرفع `uata-windows-installer`.
+* ما تدعمه نسختك يظهر في الإعدادات ← «هذه النسخة المثبتة».
 
 ## كيف تحصل على إشارات
 1. استورد بياناتك التاريخية الحقيقية (CSV) من شاشة التدريب.
