@@ -100,6 +100,11 @@ abstract class EngineApi {
   Future<List<Json>> listResults({String? accountType});
   Future<Json> addResult(Json result);
   Future<void> deleteResult(int id);
+  /// Record the outcome of a BUY/SELL signal; the engine copies its context.
+  Future<Json> resultFromSignal(int signalId, {required String accountType, required String outcome, String? asset, String? notes});
+  /// Statistics for one account type (simulation / demo / real) — never mixed.
+  Future<Json> dashboard(String accountType);
+  Future<List<Json>> insights(String accountType);
 
   // backup & privacy
   Future<List<Json>> listBackups();

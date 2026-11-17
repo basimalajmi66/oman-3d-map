@@ -4,6 +4,7 @@ import '../../core/engine_api.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
 import 'signal_details.dart';
+import 'stats_view.dart';
 
 /// Signal history and the manual trade-result journal. Results are always
 /// grouped by account type (simulation / demo / real) and never mixed.
@@ -42,6 +43,41 @@ class _SignalLogScreenState extends State<SignalLogScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
+  Future<void> _recordFromSignal(Json g) async {
+    var account = 'demo', outcome = 'win';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text('${app.t('record_result')}: ${g['signal']}'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            SegmentedButton<String>(
+              key: const Key('rr_account'),
+              segments: [for (final a in ['simulation', 'demo', 'real']) ButtonSegment(value: a, label: Text(app.t(a)))],
+              selected: {account},
+              onSelectionChanged: (v) => setLocal(() => account = v.first),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              key: const Key('rr_outcome'),
+              segments: [for (final o in ['win', 'loss', 'draw', 'cancelled']) ButtonSegment(value: o, label: Text(app.t(o)))],
+              selected: {outcome},
+              onSelectionChanged: (v) => setLocal(() => outcome = v.first),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(app.t('cancel'))),
+            FilledButton(key: const Key('rr_save'), onPressed: () => Navigator.pop(ctx, true), child: Text(app.t('save'))),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await runWithFeedback(context, () => app.engine.resultFromSignal(g['id'] as int, accountType: account, outcome: outcome),
+        successKey: 'saved');
+    await _reload();
+  }
+
   Future<void> _addResult() async {
     final r = await showDialog<Json>(context: context, builder: (_) => _ResultDialog(app: app));
     if (r == null || !mounted) return;
@@ -53,11 +89,11 @@ class _SignalLogScreenState extends State<SignalLogScreen> {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: Text(app.t('log')),
-          bottom: TabBar(tabs: [Tab(text: app.t('signals_tab')), Tab(text: app.t('results_tab'))]),
+          bottom: TabBar(tabs: [Tab(text: app.t('signals_tab')), Tab(text: app.t('results_tab')), Tab(text: app.t('stats_tab'))]),
         ),
         floatingActionButton: FloatingActionButton.extended(
           key: const Key('add_result'),
@@ -67,7 +103,7 @@ class _SignalLogScreenState extends State<SignalLogScreen> {
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : TabBarView(children: [_signalsTab(app), _resultsTab(app)]),
+            : TabBarView(children: [_signalsTab(app), _resultsTab(app), const StatsView()]),
       ),
     );
   }
@@ -101,6 +137,14 @@ class _SignalLogScreenState extends State<SignalLogScreen> {
                           title: Text('${g['signal']} · ${g['asset'] ?? '—'} · ${g['timeframe_sec']}${app.t('seconds')}'),
                           subtitle: Text(fmtDate(g['created_at'] as String?)),
                           onTap: () => showSignalDetails(context, signal: g),
+                          trailing: g['signal'] == 'WAIT'
+                              ? null
+                              : IconButton(
+                                  key: Key('record_${g['id']}'),
+                                  tooltip: app.t('record_result'),
+                                  icon: const Icon(Icons.flag_outlined),
+                                  onPressed: () => _recordFromSignal(g),
+                                ),
                         ))
                     .toList(),
               ),

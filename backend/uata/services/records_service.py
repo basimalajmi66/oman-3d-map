@@ -31,7 +31,8 @@ class RecordsService:
                       data_quality: float | None, confidence: float | None = None,
                       confidence_calibrated: bool = False, duration_sec: int | None = None,
                       asset: str | None = None, strategy_id: int | None = None,
-                      session_id: int | None = None, min_confluence: int = 3) -> dict[str, Any]:
+                      session_id: int | None = None, min_confluence: int = 3,
+                      market_condition: str | None = None) -> dict[str, Any]:
         if signal not in ("BUY", "SELL", "WAIT"):
             raise ValueError("signal must be BUY, SELL or WAIT")
         if signal != "WAIT":
@@ -45,11 +46,11 @@ class RecordsService:
             sid = conn.execute(
                 "INSERT INTO signals(session_id,created_at,asset,timeframe_sec,signal,confidence_score,"
                 "confidence_calibrated,duration_sec,strategy_id,reasons_json,supporting_json,opposing_json,"
-                "data_quality,data_basis,engine_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "data_quality,data_basis,engine_version,market_condition) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (session_id, utcnow(), asset, timeframe_sec, signal, confidence, int(confidence_calibrated),
                  duration_sec, strategy_id, json.dumps(reasons, ensure_ascii=False),
                  json.dumps(supporting, ensure_ascii=False), json.dumps(opposing, ensure_ascii=False),
-                 data_quality, data_basis, ENGINE_VERSION)).lastrowid
+                 data_quality, data_basis, ENGINE_VERSION, market_condition)).lastrowid
             audit(conn, "system", "signal.record", signal_id=sid, signal=signal)
             return row_to_dict(conn.execute("SELECT * FROM signals WHERE id=?", (sid,)).fetchone())
 
@@ -77,13 +78,33 @@ class RecordsService:
         if data["signal_type"] not in ("BUY", "SELL"):
             raise ValueError("signal_type must be BUY or SELL")
         cols = ("signal_id", "account_type", "asset", "timeframe_sec", "strategy_id", "signal_type",
-                "signal_time", "duration_sec", "outcome", "pnl", "market_condition", "notes")
+                "signal_time", "duration_sec", "outcome", "pnl", "market_condition", "notes", "confidence",
+                "data_quality")
         with self.db.session() as conn:
             rid = conn.execute(
                 f"INSERT INTO trade_results({','.join(cols)},created_at) VALUES ({','.join('?' * len(cols))},?)",
                 (*[data.get(c) for c in cols], utcnow())).lastrowid
             audit(conn, "user", "result.add", result_id=rid, account_type=data["account_type"])
             return row_to_dict(conn.execute("SELECT * FROM trade_results WHERE id=?", (rid,)).fetchone())
+
+    def result_from_signal(self, signal_id: int, account_type: str, outcome: str, asset: str | None = None,
+                           pnl: float | None = None, notes: str | None = None) -> dict[str, Any]:
+        """Record the outcome of a BUY/SELL signal; context is copied from the signal, not re-typed."""
+        with self.db.session() as conn:
+            sig = conn.execute("SELECT * FROM signals WHERE id=?", (signal_id,)).fetchone()
+            dup = conn.execute("SELECT id FROM trade_results WHERE signal_id=?", (signal_id,)).fetchone()
+        if sig is None:
+            raise KeyError(signal_id)
+        if sig["signal"] == "WAIT":
+            raise ValueError("a WAIT signal has no trade to record")
+        if dup:
+            raise ValueError("a result is already recorded for this signal")
+        return self.add_result({
+            "signal_id": signal_id, "account_type": account_type, "asset": asset or sig["asset"] or "UNKNOWN",
+            "timeframe_sec": sig["timeframe_sec"], "strategy_id": sig["strategy_id"], "signal_type": sig["signal"],
+            "signal_time": sig["created_at"], "duration_sec": sig["duration_sec"], "outcome": outcome, "pnl": pnl,
+            "market_condition": sig["market_condition"], "notes": notes, "confidence": sig["confidence_score"],
+            "data_quality": sig["data_quality"]})
 
     def list_results(self, account_type: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
         sql, args = "SELECT * FROM trade_results", []

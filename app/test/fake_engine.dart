@@ -270,6 +270,27 @@ class FakeEngine implements EngineApi {
               {...i.cast<String, dynamic>(), 'source_title': s['title'], 'snippet': i['content']}
       ];
 
+  // ---------------------------------------------------------------- statistics (phase 9)
+  Map<String, Json> dashboards = {};
+  Map<String, List<Json>> insightsByAccount = {};
+
+  @override
+  Future<Json> resultFromSignal(int signalId, {required String accountType, required String outcome, String? asset, String? notes}) async {
+    calls.add('result_from_signal:$signalId:$accountType:$outcome');
+    final r = {'id': ++_id, 'signal_id': signalId, 'account_type': accountType, 'outcome': outcome};
+    results.add(r);
+    return r;
+  }
+
+  @override
+  Future<Json> dashboard(String accountType) async {
+    calls.add('dashboard:$accountType');
+    return dashboards[accountType] ?? {'account_type': accountType, 'signals': {'total': 0}, 'results': {'trades': 0}};
+  }
+
+  @override
+  Future<List<Json>> insights(String accountType) async => insightsByAccount[accountType] ?? [];
+
   // ---------------------------------------------------------------- learning reports
   List<Json> reports = [];
 

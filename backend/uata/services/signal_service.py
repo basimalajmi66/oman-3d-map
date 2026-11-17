@@ -23,7 +23,8 @@ class SignalService:
         self.settings = settings       # SettingsService
         self._lock = threading.Lock()
         self._last_fp: dict[str, str] = {}
-        self._last_trade_signal_at: float = 0.0
+        # None = no trade signal yet (monotonic time starts near 0 after a reboot: never compare against 0)
+        self._last_trade_signal_at: float | None = None
         self.latest: dict | None = None
 
     def evaluate(self, reading: dict, technical: dict, knowledge: list[dict] | None, stream: str,
@@ -36,7 +37,9 @@ class SignalService:
         out = d.to_dict()
         with self._lock:
             repeated = bool(fp) and self._last_fp.get(stream) == fp
-            if d.signal != "WAIT" and time.monotonic() - self._last_trade_signal_at < s.signal_cooldown_sec:
+            in_cooldown = (self._last_trade_signal_at is not None
+                           and time.monotonic() - self._last_trade_signal_at < s.signal_cooldown_sec)
+            if d.signal != "WAIT" and in_cooldown:
                 out.update(signal="WAIT", reason_code="cooldown", reason_codes=["cooldown"] + out["reason_codes"],
                            duration_sec=None)
             out["repeated"] = repeated
@@ -49,7 +52,8 @@ class SignalService:
                     opposing=out["opposing"], data_quality=out["data_quality"], confidence=out["confidence"],
                     confidence_calibrated=False, duration_sec=out["duration_sec"], asset=asset,
                     strategy_id=(out["strategy"] or {}).get("id"), session_id=session_id,
-                    min_confluence=s.min_confluence_factors)
+                    min_confluence=s.min_confluence_factors,
+                    market_condition=(technical or {}).get("market_condition"))
                 out["signal_id"] = rec["id"]
                 out["recorded"] = True
                 if out["signal"] != "WAIT":

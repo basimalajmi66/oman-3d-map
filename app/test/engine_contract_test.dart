@@ -241,6 +241,19 @@ void main() {
     expect((await api.listSignals()).length, before);
   }, skip: skip);
 
+  test('phase 9: result from the BUY signal → per-account dashboard and insights', () async {
+    final buy = (await api.listSignals()).firstWhere((s) => s['signal'] == 'BUY');
+    final res = await api.resultFromSignal(buy['id'] as int, accountType: 'demo', outcome: 'win', asset: 'EURUSD');
+    expect(res['signal_type'], 'BUY');
+    expect(res['strategy_id'], buy['strategy_id']);
+    final demo = await api.dashboard('demo');
+    expect((demo['results'] as Map)['wins'], greaterThanOrEqualTo(1));
+    final real = await api.dashboard('real');
+    expect((real['results'] as Map)['trades'], 0); // never mixed
+    final ins = await api.insights('real');
+    expect(ins.single['code'], 'insufficient_sample');
+  }, skip: skip);
+
   test('token is required', () async {
     final bad = HttpEngineApi(baseUrl: api.baseUrl, tokenProvider: () async => 'wrong');
     await expectLater(bad.getSettings(), throwsA(predicate((e) => e is EngineException && e.statusCode == 401)));

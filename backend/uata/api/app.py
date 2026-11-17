@@ -32,6 +32,7 @@ from uata.services.chart_input_service import ChartInputService, InvalidImage
 from uata.services.screen_watch import ScreenWatcher
 from uata.services.video_service import VideoService
 from uata.services.signal_service import SignalService
+from uata.services.stats_service import StatsService
 from uata.services import strategy_service as strat
 from uata.video.transcript import FasterWhisperSTT
 from uata.vision.capture import CaptureUnavailable, Capturer, MssCapturer
@@ -57,6 +58,7 @@ class Services:
     videos: VideoService
     strategies: strat.StrategyService
     signals: SignalService
+    stats: StatsService
 
 
 def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
@@ -75,7 +77,7 @@ def build_services(paths: Paths, capturer: Capturer | None = None) -> Services:
                           stt_factory=lambda: FasterWhisperSTT(settings.get().stt_model_path))
     return Services(paths, db, settings, ControlService(db, watcher),
                     knowledge, records, BackupService(db, paths),
-                    chart_inputs, watcher, videos, strategies, signals)
+                    chart_inputs, watcher, videos, strategies, signals, StatsService(db))
 
 
 # ---------------------------------------------------------------- request bodies
@@ -155,6 +157,14 @@ class SyntheticIn(BaseModel):
     rows: int = 3000
     timeframe_sec: int = 30
     seed: int = 0
+
+
+class SignalResultIn(BaseModel):
+    account_type: str
+    outcome: str
+    asset: str | None = None
+    pnl: float | None = None
+    notes: str | None = None
 
 
 class BackupIn(BaseModel):
@@ -560,6 +570,24 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
         if not svc.records.delete_result(result_id):
             raise HTTPException(404, "result not found")
         return {"deleted": result_id}
+
+    @app.post("/signals/{signal_id}/result", dependencies=a, status_code=201)
+    def result_from_signal(signal_id: int, body: SignalResultIn):
+        """Record what happened after a BUY/SELL; context is copied from the signal."""
+        try:
+            return svc.records.result_from_signal(signal_id, body.account_type, body.outcome, body.asset,
+                                                  body.pnl, body.notes)
+        except KeyError:
+            raise HTTPException(404, "signal not found") from None
+
+    @app.get("/stats/dashboard", dependencies=a)
+    def stats_dashboard(account_type: str = "demo"):
+        return svc.stats.dashboard(account_type)
+
+    @app.get("/stats/insights", dependencies=a)
+    def stats_insights(account_type: str = "demo"):
+        """Suggestions only — nothing here changes a strategy."""
+        return svc.stats.insights(account_type)
 
     @app.get("/stats/summary", dependencies=a)
     def stats_summary():

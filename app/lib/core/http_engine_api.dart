@@ -226,6 +226,15 @@ class HttpEngineApi implements EngineApi {
   Future<void> deleteResult(int id) async => _delete('/results/$id');
 
   @override
+  Future<Json> resultFromSignal(int signalId, {required String accountType, required String outcome, String? asset, String? notes}) async =>
+      _map(await _post('/signals/$signalId/result',
+          {'account_type': accountType, 'outcome': outcome, 'asset': asset, 'notes': notes}));
+  @override
+  Future<Json> dashboard(String accountType) async => _map(await _get('/stats/dashboard', {'account_type': accountType}));
+  @override
+  Future<List<Json>> insights(String accountType) async => _list(await _get('/stats/insights', {'account_type': accountType}));
+
+  @override
   Future<List<Json>> listBackups() async => _list(await _get('/backups'));
   @override
   Future<Json> createBackup(String passphrase) async => _map(await _post('/backups', {'passphrase': passphrase}));

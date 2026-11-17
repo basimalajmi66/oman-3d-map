@@ -1,7 +1,7 @@
 # قاعدة البيانات المحلية
 
 * المحرك: SQLite بوضع WAL و`synchronous=NORMAL` — البيانات المؤكدة لا تضيع عند إغلاق البرنامج أو انقطاعه.
-* المخطط: `backend/uata/db/schema_v1.sql` و`schema_v2.sql` (المرحلة 2) و`schema_v3.sql` (المرحلة 3: حفظ قراءة الشارت مع كل صورة) و`schema_v4.sql` (المرحلة 5: `location` و`rule_json` لعناصر المعرفة) و`schema_v5.sql` (المرحلة 6: `video_analyses`) و`schema_v6.sql` (المرحلة 7: `datasets`، `definition_json`، روابط الاختبارات). الترحيلات مرقمة في `MIGRATIONS` وتُسجَّل في `schema_migrations`، وتُطبَّق تلقائياً عند التشغيل وبعد استعادة نسخة أقدم.
+* المخطط: `backend/uata/db/schema_v1.sql` و`schema_v2.sql` (المرحلة 2) و`schema_v3.sql` (المرحلة 3: حفظ قراءة الشارت مع كل صورة) و`schema_v4.sql` (المرحلة 5: `location` و`rule_json` لعناصر المعرفة) و`schema_v5.sql` (المرحلة 6: `video_analyses`) و`schema_v6.sql` (المرحلة 7: `datasets`، `definition_json`، روابط الاختبارات) و`schema_v7.sql` (المرحلة 9: حالة السوق مع الإشارة، الثقة والجودة مع النتيجة). الترحيلات مرقمة في `MIGRATIONS` وتُسجَّل في `schema_migrations`، وتُطبَّق تلقائياً عند التشغيل وبعد استعادة نسخة أقدم.
 * كل اتصال قصير العمر داخل معاملة `BEGIN IMMEDIATE` (آمن مع خيوط FastAPI).
 * الأعمدة المنتهية بـ `_json` تُفك تلقائياً (`tags_json` ← `tags`).
 
