@@ -22,8 +22,9 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
+from uata.analysis.engine import TechnicalAnalyzer
 from uata.config import API_VERSION, ENGINE_VERSION, Paths, _restrict_permissions
 from uata.db.database import Database
 from uata.services.backup_service import BackupError, BackupService
@@ -90,6 +91,25 @@ class LinkIn(BaseModel):
 class StartIn(BaseModel):
     input_mode: str = "upload"
     asset: str | None = None
+
+
+class CandleIn(BaseModel):
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float | None = None
+
+    @model_validator(mode="after")
+    def _ohlc(self):
+        if not (self.low <= min(self.open, self.close) and self.high >= max(self.open, self.close)):
+            raise ValueError("inconsistent candle: low <= open/close <= high required")
+        return self
+
+
+class CandlesIn(BaseModel):
+    candles: list[CandleIn] = Field(min_length=1, max_length=5000)
+    last_is_forming: bool = True  # safe default: assume the newest candle is still open
 
 
 class BackupIn(BaseModel):
@@ -179,7 +199,8 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
             raise HTTPException(403, str(e)) from None
         if body.input_mode == "continuous_screen":
             svc.watcher.start(s.capture_interval_sec, s.capture_region, s.min_data_quality_to_signal,
-                              allowed=lambda: svc.settings.get().screen_capture_allowed and not svc.control.halted)
+                              allowed=lambda: svc.settings.get().screen_capture_allowed and not svc.control.halted,
+                              enabled=lambda: svc.settings.get().indicators)
         return svc.control.status()
 
     @app.post("/analysis/stop", dependencies=a)
@@ -204,7 +225,8 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
         s = svc.settings.get()
         try:
             return svc.chart_inputs.submit(file.file, file.filename, input_mode, s.screen_capture_allowed,
-                                           session["id"] if session else None, s.min_data_quality_to_signal)
+                                           session["id"] if session else None, s.min_data_quality_to_signal,
+                                           enabled=s.indicators)
         except PermissionError as e:
             raise HTTPException(403, str(e)) from None
         except InvalidImage as e:
@@ -226,7 +248,7 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
         mode = "screen_region" if s.capture_region else "screenshot"
         try:
             return svc.chart_inputs.submit_image(img, None, mode, True, session["id"] if session else None,
-                                                 s.min_data_quality_to_signal)
+                                                 s.min_data_quality_to_signal, enabled=s.indicators)
         except InvalidImage as e:
             raise HTTPException(422, str(e)) from None
 
@@ -236,6 +258,19 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
             return svc.chart_inputs.reading(input_id)
         except KeyError:
             raise HTTPException(404, "input not found") from None
+
+    @app.post("/analysis/technical", dependencies=a)
+    def technical_from_candles(body: CandlesIn):
+        """Technical analysis of a candle series from a trusted data source (closed candles only)."""
+        s = svc.settings.get()
+        candles = [c.model_dump() for c in body.candles]
+        if body.last_is_forming:
+            candles = candles[:-1]  # never analyse a candle that has not closed
+        has_vol = all(c.get("volume") is not None for c in candles) and bool(candles)
+        out = TechnicalAnalyzer().analyze(candles, s.indicators, has_volume=has_vol)
+        out["units"] = "price"
+        out["data_basis"] = "price_feed"
+        return out
 
     @app.get("/analysis/inputs/{input_id}/annotated", dependencies=a)
     def chart_annotated(input_id: int):

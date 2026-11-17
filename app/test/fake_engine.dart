@@ -140,7 +140,26 @@ class FakeEngine implements EngineApi {
     return {'input': input, 'analysis': _analysis()};
   }
 
+  Json? technical = {
+    'available': true, 'units': 'price', 'candles_used': 49, 'market_condition': 'trending',
+    'trend': {'direction': 'up', 'strength': 0.7, 'structure': 'up'},
+    'supporting_bullish': [
+      {'name': 'trend', 'code': 'trend_up', 'strength': 0.7, 'params': {}},
+      {'name': 'macd', 'code': 'macd_cross_up', 'strength': 0.65, 'params': {}},
+    ],
+    'supporting_bearish': [
+      {'name': 'rsi', 'code': 'rsi_overbought', 'strength': 0.5, 'params': {'value': 74.0}},
+    ],
+    'neutral': ['atr'], 'disabled': ['volatility'], 'unavailable': ['volume'],
+    'bullish_score': 1.35, 'bearish_score': 0.5,
+    'levels': [
+      {'price': 1.1012, 'kind': 'support', 'touches': 3, 'last_index': 40, 'strength': 0.9},
+    ],
+    'patterns': <String>[], 'warnings': ['no_volume_data'],
+  };
+
   Json _analysis() => {
+        'technical': technical,
         'signal': 'WAIT',
         'reason_code': reading['usable'] == true ? 'signal_engine_not_installed' : 'image_quality_insufficient',
         'data_basis': 'image_only', 'confidence': null, 'data_quality': reading['data_quality'], 'reading': reading,

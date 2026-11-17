@@ -41,10 +41,12 @@ Future<void> showChartResult(BuildContext context, Json result) {
             Text('${app.t('data_basis')}: ${basis == 'image_only' ? app.t('image_only') : basis ?? '—'}'),
             if (quality != null) Text('${app.t('data_quality')}: ${(quality * 100).round()}%', key: const Key('chart_quality')),
             if (reading != null) ..._readingLines(app, reading),
+            // verify the reading right where it is described
             if (input['id'] != null) ...[
               const SizedBox(height: 8),
               _AnnotatedPreview(app: app, inputId: input['id'] as int),
             ],
+            if (analysis['technical'] is Map) ...technicalLines(app, (analysis['technical'] as Map).cast<String, dynamic>()),
           ]),
         ),
       ),
@@ -121,4 +123,55 @@ class _AnnotatedPreviewState extends State<_AnnotatedPreview> {
       label: Text(widget.app.t('show_detection')),
     );
   }
+}
+
+/// Technical analysis section (shared by the result dialog and other views).
+List<Widget> technicalLines(AppState app, Json t) {
+  if (t['available'] != true) {
+    final reason = t['reason'] as String?;
+    return [
+      const Divider(height: 20),
+      Text('${app.t('technical_unavailable')}${reason != null ? ': ${_tr(app, 'tr_', reason)}' : ''}',
+          key: const Key('technical_unavailable')),
+    ];
+  }
+  final trend = (t['trend'] as Map?)?.cast<String, dynamic>() ?? const {};
+  List<Json> list(String k) => ((t[k] as List?) ?? const []).cast<Map>().map((e) => e.cast<String, dynamic>()).toList();
+  Widget factorLine(Json f, Color c) => Text(
+        '• ${app.t('ind_${f['name']}')} — ${_tr(app, 'c_', f['code'] as String)} (${((f['strength'] as num) * 100).round()}%)',
+        style: TextStyle(color: c, fontSize: 12),
+      );
+  final levels = list('levels');
+  final rel = t['units'] == 'relative';
+  final disabled = (t['disabled'] as List?)?.length ?? 0;
+  final unavailable = (t['unavailable'] as List?)?.length ?? 0;
+  final warnings = (t['warnings'] as List?)?.cast<String>() ?? const [];
+  return [
+    const Divider(height: 20),
+    Text(app.t('technical'), style: const TextStyle(fontWeight: FontWeight.bold)),
+    Text('${app.t('market_condition')}: ${app.t('mc_${t['market_condition']}')}  ·  '
+        '${app.t('trend')}: ${app.t('trend_dir_${trend['direction']}')}', key: const Key('technical_header')),
+    const SizedBox(height: 4),
+    Text('${app.t('bullish_factors')} (${list('supporting_bullish').length})',
+        style: const TextStyle(fontWeight: FontWeight.w600, color: SignalColors.buy)),
+    ...list('supporting_bullish').map((f) => factorLine(f, SignalColors.buy)),
+    Text('${app.t('bearish_factors')} (${list('supporting_bearish').length})',
+        style: const TextStyle(fontWeight: FontWeight.w600, color: SignalColors.sell)),
+    ...list('supporting_bearish').map((f) => factorLine(f, SignalColors.sell)),
+    if (disabled + unavailable > 0)
+      Text('${app.t('factors_disabled')}: $disabled  ·  ${app.t('factors_unavailable')}: $unavailable',
+          style: const TextStyle(fontSize: 11)),
+    if (levels.isNotEmpty) ...[
+      const SizedBox(height: 4),
+      Text('${app.t('key_levels')}${rel ? ' ${app.t('units_relative')}' : ''}',
+          style: const TextStyle(fontWeight: FontWeight.w600)),
+      ...levels.map((l) => Text(
+          '• ${app.t(l['kind'] as String)} ${(l['price'] as num).toStringAsPrecision(6)} (${l['touches']} ${app.t('touches')})',
+          style: const TextStyle(fontSize: 12))),
+    ],
+    if (warnings.isNotEmpty)
+      Text(warnings.map((w) => _tr(app, 'w_', w)).join(' · '), style: const TextStyle(fontSize: 11, color: SignalColors.wait)),
+    const SizedBox(height: 4),
+    Text(app.t('technical_not_signal'), style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
+  ];
 }

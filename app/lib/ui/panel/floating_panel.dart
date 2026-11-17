@@ -315,6 +315,18 @@ class _StatusLine extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 11),
         ),
+      if (latest?['technical'] is Map && (latest!['technical'] as Map)['available'] == true)
+        Builder(builder: (_) {
+          final t = (latest['technical'] as Map).cast<String, dynamic>();
+          final dir = ((t['trend'] as Map?)?['direction']) ?? 'sideways';
+          return Text(
+            '${app.t('trend')}: ${app.t('trend_dir_$dir')} · ${app.t('mc_${t['market_condition']}')} · '
+            '↑${(t['supporting_bullish'] as List).length} ↓${(t['supporting_bearish'] as List).length}',
+            key: const Key('watch_technical'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 11),
+          );
+        }),
       if (watch?['error'] != null)
         Text('${watch!['error']}', key: const Key('watch_error'),
             textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: SignalColors.sell)),

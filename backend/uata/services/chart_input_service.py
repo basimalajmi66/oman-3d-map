@@ -22,6 +22,7 @@ import cv2
 import numpy as np
 
 from uata.db.database import Database, audit, row_to_dict, utcnow
+from uata.analysis.engine import analyze_reading
 from uata.vision.reader import ChartReader, annotate
 
 INPUT_MODES = ("upload", "share", "screenshot", "screen_region")
@@ -45,7 +46,7 @@ class ChartInputService:
 
     def submit(self, stream: BinaryIO, filename: str | None, input_mode: str,
                screen_capture_allowed: bool, session_id: int | None = None,
-               min_quality: float | None = None) -> dict[str, Any]:
+               min_quality: float | None = None, enabled: dict[str, bool] | None = None) -> dict[str, Any]:
         self._check_mode(input_mode, screen_capture_allowed)
         data = stream.read(MAX_IMAGE_BYTES + 1)
         if not data:
@@ -56,7 +57,7 @@ class ChartInputService:
         if img is None:
             raise InvalidImage("file is not a readable image")
         return self.submit_image(img, filename, input_mode, screen_capture_allowed, session_id,
-                                 min_quality, size_bytes=len(data))
+                                 min_quality, size_bytes=len(data), enabled=enabled)
 
     @staticmethod
     def _check_mode(input_mode: str, screen_capture_allowed: bool) -> None:
@@ -65,9 +66,12 @@ class ChartInputService:
         if input_mode in SCREEN_MODES and not screen_capture_allowed:
             raise PermissionError("screen capture permission has not been granted by the user")
 
-    def read_only(self, img: np.ndarray, min_quality: float | None = None) -> dict[str, Any]:
-        """Read a chart without storing anything (continuous screen reading)."""
-        return self._reader(min_quality).read(img).to_dict()
+    def read_only(self, img: np.ndarray, min_quality: float | None = None,
+                  enabled: dict[str, bool] | None = None) -> dict[str, Any]:
+        """Read + analyse a chart without storing anything (continuous screen reading)."""
+        reading = self._reader(min_quality).read(img).to_dict()
+        reading["technical"] = analyze_reading(reading, enabled)
+        return reading
 
     def _reader(self, min_quality: float | None) -> ChartReader:
         if min_quality is None or min_quality == self.reader.min_quality:
@@ -76,7 +80,7 @@ class ChartInputService:
 
     def submit_image(self, img: np.ndarray, filename: str | None, input_mode: str, screen_capture_allowed: bool,
                      session_id: int | None = None, min_quality: float | None = None,
-                     size_bytes: int | None = None) -> dict[str, Any]:
+                     size_bytes: int | None = None, enabled: dict[str, bool] | None = None) -> dict[str, Any]:
         self._check_mode(input_mode, screen_capture_allowed)
         height, width = img.shape[:2]
         if min(width, height) < MIN_SIDE:
@@ -97,6 +101,7 @@ class ChartInputService:
             tmp.replace(dest)
 
         reading = self._reader(min_quality).read(img).to_dict()
+        reading["technical"] = analyze_reading(reading, enabled)  # Phase 4: closed candles only
 
         with self.db.session() as conn:
             iid = conn.execute(
@@ -175,4 +180,33 @@ def analysis_from_reading(reading: dict, width: int, height: int) -> dict[str, A
         "data_quality": reading["data_quality"],
         "image": {"width": width, "height": height},
         "reading": reading["summary"],
+        "technical": technical_summary(reading.get("technical")),
+    }
+
+
+def technical_summary(t: dict | None) -> dict | None:
+    """Compact view of the technical analysis for the panel / result dialog."""
+    if not t:
+        return None
+    if not t.get("available"):
+        return {"available": False, "reason": t.get("reason"), "candles_used": t.get("candles_used")}
+    active = [f for f in t["factors"] if f["enabled"] and f["available"]]
+    return {
+        "available": True,
+        "units": t.get("units"),
+        "candles_used": t["candles_used"],
+        "market_condition": t["market_condition"],
+        "trend": t["trend"],
+        "supporting_bullish": [{"name": f["name"], "code": f["code"], "strength": f["strength"], "params": f["params"]}
+                               for f in active if f["direction"] == "bullish"],
+        "supporting_bearish": [{"name": f["name"], "code": f["code"], "strength": f["strength"], "params": f["params"]}
+                               for f in active if f["direction"] == "bearish"],
+        "neutral": [f["name"] for f in active if f["direction"] == "neutral"],
+        "disabled": t["confluence"]["disabled"],
+        "unavailable": t["confluence"]["unavailable"],
+        "bullish_score": t["confluence"]["bullish_score"],
+        "bearish_score": t["confluence"]["bearish_score"],
+        "levels": t["levels"],
+        "patterns": [p["name"] for p in t["patterns"]],
+        "warnings": t["warnings"],
     }

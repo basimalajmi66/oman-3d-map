@@ -55,6 +55,8 @@ void main() {
     expect(find.textContaining(tr('ar', 'prices_read')), findsOneWidget);
     expect(find.text(tr('ar', 'forming_note')), findsOneWidget);
     expect(find.byKey(const Key('tf_mismatch')), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('show_detection')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('show_detection')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('annotated_image')), findsOneWidget);
@@ -133,3 +135,4 @@ void main() {
     expect(e.settings['capture_region'], isNull);
   });
 }
+

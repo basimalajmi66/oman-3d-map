@@ -133,6 +133,10 @@ void main() {
     expect(reading['candles'], 45);
     expect(reading['closed_candles'], 44);
     expect((r['analysis'] as Map)['reason_code'], 'signal_engine_not_installed');
+    final technical = (r['analysis'] as Map)['technical'] as Map;
+    expect(technical['available'], true);
+    expect(technical['candles_used'], 44); // closed candles only
+    expect(['trending', 'ranging', 'volatile'], contains(technical['market_condition']));
     final png = await api.chartAnnotated((r['input'] as Map)['id'] as int);
     expect(png.take(4), [0x89, 0x50, 0x4E, 0x47]);
   }, skip: skip);

@@ -17,7 +17,7 @@ from uata.vision.capture import CaptureUnavailable, Capturer
 
 
 class ScreenWatcher:
-    def __init__(self, capturer: Capturer, read: Callable[[Any, float], dict]):
+    def __init__(self, capturer: Capturer, read: Callable[..., dict]):
         self.capturer = capturer
         self._read = read
         self._thread: threading.Thread | None = None
@@ -32,7 +32,7 @@ class ScreenWatcher:
         return self._thread is not None and self._thread.is_alive()
 
     def start(self, interval_sec: float, region: dict | None, min_quality: float,
-              allowed: Callable[[], bool]) -> None:
+              allowed: Callable[[], bool], enabled: Callable[[], dict] | None = None) -> None:
         self.stop()
         self._stop.clear()
         self.latest, self.error, self.frames = None, None, 0
@@ -44,13 +44,15 @@ class ScreenWatcher:
                     return
                 try:
                     img = self.capturer.grab(region)
-                    reading = self._read(img, min_quality)
+                    reading = self._read(img, min_quality, enabled() if enabled else None)
                     with self._lock:
+                        from uata.services.chart_input_service import technical_summary
                         self.latest = {
                             "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                             "summary": reading["summary"],
                             "data_quality": reading["data_quality"],
                             "usable": reading["usable"],
+                            "technical": technical_summary(reading.get("technical")),
                         }
                         self.frames += 1
                         self.error = None
