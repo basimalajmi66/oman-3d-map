@@ -46,7 +46,8 @@ flutter test
 
 ## بناء نسخة Android
 ```bash
-cd app && flutter build apk --debug    # يضمّن المحرك عبر Chaquopy (يحتاج Android SDK والوصول إلى chaquo.com)
+cd app && flutter build apk --debug --target-platform android-arm64,android-x64
+# يضمّن المحرك عبر Chaquopy. Python 3.12 متاح لمعماريتي arm64 و x86_64 فقط (أجهزة 32-بت غير مدعومة)
 ```
 
 ## بناء نسخة Windows كاملة
