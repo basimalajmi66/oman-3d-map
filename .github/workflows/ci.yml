@@ -42,6 +42,8 @@ jobs:
         working-directory: app
         env:
           UATA_BACKEND_DIR: ${{ github.workspace }}/backend
+          # live download of real prices (Dukascopy, Binance) + quick start on real data
+          UATA_NETWORK_TESTS: "1"
 
   android-build:
     runs-on: ubuntu-latest

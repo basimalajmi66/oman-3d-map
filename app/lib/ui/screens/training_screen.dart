@@ -5,6 +5,7 @@ import '../../core/engine_api.dart';
 import '../../l10n/strings.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
+import 'quick_start_screen.dart';
 import 'knowledge_screen.dart' show FilePickFn;
 
 Future<UploadFile?> pickCsv() async {
@@ -30,6 +31,14 @@ class TrainingScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: Text(app.t('training_title')),
+          actions: [
+            TextButton.icon(
+              key: const Key('open_quick_start'),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const QuickStartScreen())),
+              icon: const Icon(Icons.rocket_launch_outlined),
+              label: Text(app.t('qs_title')),
+            ),
+          ],
           bottom: TabBar(tabs: [Tab(text: app.t('strategies_tab')), Tab(text: app.t('datasets_tab'))]),
         ),
         body: TabBarView(children: [const _StrategiesTab(), _DatasetsTab(pickCsvFn: pickCsvFn)]),
