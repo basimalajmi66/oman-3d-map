@@ -18,7 +18,8 @@ Pop-Location
 # 2) Flutter desktop app
 Push-Location "$root\app"
 flutter pub get; Check
-flutter build windows --release; Check
+$build = if ($env:GITHUB_RUN_NUMBER) { $env:GITHUB_RUN_NUMBER } else { "dev" }
+flutter build windows --release --dart-define=UATA_BUILD=$build; Check
 $release = "build\windows\x64\runner\Release"
 New-Item -ItemType Directory -Force "$release\engine" | Out-Null
 Copy-Item "$root\backend\dist\uata-engine.exe" "$release\engine\uata-engine.exe" -Force

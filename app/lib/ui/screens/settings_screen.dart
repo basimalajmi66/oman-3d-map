@@ -3,6 +3,9 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/engine_api.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
+
+/// The GitHub Actions run that built this app (compare with the run you downloaded); 'dev' for local builds.
+const appBuild = String.fromEnvironment('UATA_BUILD', defaultValue: 'dev');
 import 'companion_section.dart';
 import 'knowledge_screen.dart' show FilePickFn, pickDeviceFile;
 
@@ -204,6 +207,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(children: [
         _header('companion_section'),
         ListTile(
+          key: const Key('app_build'),
+          dense: true,
+          leading: const Icon(Icons.tag),
+          title: Text(app.t('app_build')),
+          subtitle: Text(appBuild),
+        ),
+        ListTile(
           leading: Icon(app.connected ? Icons.link : Icons.link_off,
               color: app.connected ? SignalColors.buy : SignalColors.sell),
           title: Text(app.t(app.connected ? 'companion_connected' : 'companion_unreachable')),
@@ -337,7 +347,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (v) => _set('external_data_sources_allowed', v),
         ),
         _header('installation_section'),
-        for (final cap in ['ocr', 'speech_to_text', 'ffmpeg', 'screen_capture'])
+        ListTile(
+          key: const Key('app_build'),
+          dense: true,
+          leading: const Icon(Icons.tag),
+          title: Text(app.t('app_build')),
+          subtitle: Text(appBuild),
+        ),
+                for (final cap in ['ocr', 'speech_to_text', 'ffmpeg', 'screen_capture'])
           ListTile(
             key: Key('cap_$cap'),
             dense: true,

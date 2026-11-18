@@ -156,7 +156,27 @@ class _StrategiesTabState extends State<_StrategiesTab> {
               ),
               Expanded(
                 child: _items.isEmpty
-                    ? Center(child: Text(app.t('no_strategies'), key: const Key('no_strategies')))
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text(app.t('no_strategies'), key: const Key('no_strategies')),
+                            const SizedBox(height: 16),
+                            Text(app.t('qs_empty_hint'), textAlign: TextAlign.center),
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              key: const Key('quick_start_big'),
+                              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18)),
+                              onPressed: () async {
+                                await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const QuickStartScreen()));
+                                await _reload();
+                              },
+                              icon: const Icon(Icons.rocket_launch_outlined),
+                              label: Text(app.t('qs_title')),
+                            ),
+                          ]),
+                        ),
+                      )
                     : ListView(
                         children: _items.map((s) {
                           final id = s['id'] as int;
