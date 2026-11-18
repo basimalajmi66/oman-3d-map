@@ -4,16 +4,19 @@ import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 
 import 'core/companion.dart';
+import 'core/engine_mode.dart';
 import 'core/engine_api.dart';
 import 'core/engine_host.dart';
 import 'core/http_engine_api.dart';
 import 'core/window_controller.dart';
+import 'engine/local/local_host.dart';
 import 'platform/android_overlay.dart';
 import 'platform/share_intake.dart';
 import 'state/app_state.dart';
 import 'ui/home/adaptive_home.dart';
 import 'ui/overlay/overlay_app.dart';
 import 'ui/screens/chart_result.dart';
+import 'ui/screens/mode_choice_screen.dart';
 import 'ui/screens/pairing_screen.dart';
 import 'ui/theme.dart';
 
@@ -31,19 +34,41 @@ Future<void> startApp() async {
   final window = await WindowController.create();
   CompanionPairing? pairing;
   EngineHost host;
+  String? mode;
   if (EngineHost.isCompanionPlatform) {
+    mode = await EngineModeStore.load();
     pairing = await CompanionStore.load();
-    if (pairing == null) {
-      final done = Completer<CompanionPairing>();
-      runApp(MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(Brightness.light),
-        darkTheme: buildTheme(Brightness.dark),
-        home: PairingScreen(onPaired: done.complete),
-      ));
-      pairing = await done.future;
+    if (mode == null) {
+      if (pairing != null) {
+        mode = 'remote'; // paired before modes existed
+      } else {
+        final chosen = Completer<String>();
+        runApp(MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: buildTheme(Brightness.light),
+          darkTheme: buildTheme(Brightness.dark),
+          home: ModeChoiceScreen(onChosen: chosen.complete),
+        ));
+        mode = await chosen.future;
+      }
+      await EngineModeStore.save(mode);
     }
-    host = RemoteEngineHost(pairing);
+    if (mode == 'local') {
+      pairing = null;
+      host = LocalEngineHost();
+    } else {
+      if (pairing == null) {
+        final done = Completer<CompanionPairing>();
+        runApp(MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: buildTheme(Brightness.light),
+          darkTheme: buildTheme(Brightness.dark),
+          home: PairingScreen(onPaired: done.complete),
+        ));
+        pairing = await done.future;
+      }
+      host = RemoteEngineHost(pairing);
+    }
   } else {
     host = DesktopEngineHost();
   }
@@ -55,6 +80,13 @@ Future<void> startApp() async {
     engine = HttpEngineApi(tokenProvider: () async => null);
   }
   late final AppState state;
+  Future<void> restartAs(String newMode) async {
+    await EngineModeStore.save(newMode);
+    state.dispose();
+    host.dispose();
+    await startApp();
+  }
+
   state = AppState(
     engine: engine,
     window: window,
@@ -65,17 +97,24 @@ Future<void> startApp() async {
       state.dispose();
       await startApp();
     },
+    onSwitchMode: mode == null ? null : () => restartAs(mode == 'local' ? 'remote' : 'local'),
   );
   await state.init();
   runApp(UataApp(state: state));
 
   if (EngineHost.isCompanionPlatform) {
+    final library = state.has('knowledge');
     if (_share case final share?) {
       share
         ..engine = engine
+        ..libraryAvailable = library
         ..onOutcomes = (o) => _reportShares(state, o);
     } else {
-      _share = ShareIntake(engine: engine, source: ReceiveSharingIntentSource(), onOutcomes: (o) => _reportShares(state, o));
+      _share = ShareIntake(
+          engine: engine,
+          source: ReceiveSharingIntentSource(),
+          libraryAvailable: library,
+          onOutcomes: (o) => _reportShares(state, o));
       await _share!.start();
     }
   }

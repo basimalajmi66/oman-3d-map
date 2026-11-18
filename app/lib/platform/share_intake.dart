@@ -50,7 +50,10 @@ class ShareOutcome {
 /// documents and videos go to the knowledge library (pending your approval).
 /// Nothing is uploaded anywhere except the local engine.
 class ShareIntake {
-  ShareIntake({required this.engine, required this.source, required this.onOutcomes});
+  ShareIntake({required this.engine, required this.source, required this.onOutcomes, this.libraryAvailable = true});
+
+  /// False on the phone engine (no knowledge library yet): documents are reported as unsupported.
+  bool libraryAvailable;
 
   /// Replaced when the phone is paired again (a new engine connection).
   EngineApi engine;
@@ -74,7 +77,7 @@ class ShareIntake {
   Future<List<ShareOutcome>> process(List<SharedItem> items) async {
     final out = <ShareOutcome>[];
     for (final item in items) {
-      if (!item.isImage && !item.isKnowledgeFile) {
+      if (!item.isImage && (!item.isKnowledgeFile || !libraryAvailable)) {
         out.add(ShareOutcome(item, ShareOutcomeKind.unsupported));
         continue;
       }

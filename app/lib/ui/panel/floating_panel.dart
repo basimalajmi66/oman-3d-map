@@ -134,11 +134,12 @@ class FloatingPanel extends StatelessWidget {
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          _NavButton(
-                              key: const Key('nav_library'),
-                              icon: Icons.menu_book_outlined,
-                              label: app.t('library'),
-                              onTap: app.connected ? () => _go(context, PanelDestination.library) : null),
+                          if (app.has('knowledge'))
+                            _NavButton(
+                                key: const Key('nav_library'),
+                                icon: Icons.menu_book_outlined,
+                                label: app.t('library'),
+                                onTap: app.connected ? () => _go(context, PanelDestination.library) : null),
                           _NavButton(
                               key: const Key('nav_training'),
                               icon: Icons.school_outlined,

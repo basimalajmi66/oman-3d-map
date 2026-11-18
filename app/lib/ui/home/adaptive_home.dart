@@ -39,10 +39,10 @@ class _TabletShellState extends State<TabletShell> {
     final app = AppScope.of(context);
     final pinned = widget.width >= AdaptiveHome.pinnedPanelBreakpoint;
     // with a pinned panel there is always a screen beside it (library by default)
-    final shown = pinned ? (_dest ?? PanelDestination.library) : _dest;
+    final shown = pinned ? (_dest ?? (app.has('knowledge') ? PanelDestination.library : PanelDestination.log)) : _dest;
     final destinations = <(PanelDestination?, IconData, String)>[
       if (!pinned) (null, Icons.dashboard_outlined, app.t('panel')),
-      (PanelDestination.library, Icons.menu_book_outlined, app.t('library')),
+      if (app.has('knowledge')) (PanelDestination.library, Icons.menu_book_outlined, app.t('library')),
       (PanelDestination.log, Icons.receipt_long_outlined, app.t('log')),
       (PanelDestination.training, Icons.school_outlined, app.t('training')),
       (PanelDestination.settings, Icons.settings_outlined, app.t('settings')),

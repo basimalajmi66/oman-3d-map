@@ -18,12 +18,19 @@ class AppState extends ChangeNotifier {
     OverlayController? overlay,
     this.companion,
     this.onUnpair,
+    this.onSwitchMode,
   }) : overlay = overlay ?? NoOverlay();
 
   /// Set on a phone / tablet: the engine is on this paired computer.
   final CompanionPairing? companion;
   final Future<void> Function()? onUnpair;
   bool get isCompanion => companion != null;
+
+  /// A capability the engine did not declare counts as available (older engines); the phone
+  /// engine declares what it lacks (`knowledge: false`, …) so those screens are hidden.
+  bool has(String capability) => capabilities[capability] != false;
+  bool get isOnDevice => capabilities['engine'] == 'phone';
+  final Future<void> Function()? onSwitchMode;
 
   final EngineApi engine;
   final WindowController window;

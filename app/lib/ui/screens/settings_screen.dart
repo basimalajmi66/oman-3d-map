@@ -31,7 +31,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    if (!AppScope.read(context).isCompanion) WidgetsBinding.instance.addPostFrameCallback((_) => _loadBackups());
+    final a = AppScope.read(context);
+    if (!a.isCompanion && a.has('backups')) WidgetsBinding.instance.addPostFrameCallback((_) => _loadBackups());
   }
 
   Future<void> _loadBackups() async {
@@ -210,6 +211,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         ListTile(leading: const Icon(Icons.info_outline), title: Text(app.t('companion_settings_on_computer'))),
         ListTile(leading: const Icon(Icons.pan_tool_outlined), title: Text(app.t('trading_mode')), subtitle: Text(app.t('manual_only'))),
+        if (app.onSwitchMode != null)
+          ListTile(
+            key: const Key('btn_switch_to_local'),
+            leading: const Icon(Icons.smartphone),
+            title: Text(app.t('mode_switch_to_local')),
+            subtitle: Text(app.t('mode_local_hint')),
+            onTap: () => app.onSwitchMode!(),
+          ),
         ListTile(
           key: const Key('btn_unpair'),
           leading: const Icon(Icons.link_off, color: SignalColors.sell),
@@ -366,16 +375,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
         ),
-        _header('companion_section'),
-        const CompanionDevicesSection(),
-        _header('backup_section'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Wrap(spacing: 8, runSpacing: 8, children: [
-            FilledButton.icon(key: const Key('btn_backup'), onPressed: _createBackup, icon: const Icon(Icons.lock_outline), label: Text(app.t('create_backup'))),
-            OutlinedButton.icon(key: const Key('btn_restore'), onPressed: _restore, icon: const Icon(Icons.restore), label: Text(app.t('restore_backup'))),
-          ]),
-        ),
+        if (app.isOnDevice) ...[
+          _header('engine_mode_section'),
+          ListTile(
+            leading: const Icon(Icons.smartphone),
+            title: Text(app.t('mode_local')),
+            subtitle: Text(app.t('mode_local_hint')),
+          ),
+          if (app.onSwitchMode != null)
+            ListTile(
+              key: const Key('btn_switch_to_computer'),
+              leading: const Icon(Icons.computer),
+              title: Text(app.t('mode_switch_to_computer')),
+              onTap: () => app.onSwitchMode!(),
+            ),
+        ],
+        if (app.has('companion')) ...[
+          _header('companion_section'),
+          const CompanionDevicesSection(),
+        ],
+        if (app.has('backups')) ...[
+          _header('backup_section'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Wrap(spacing: 8, runSpacing: 8, children: [
+              FilledButton.icon(key: const Key('btn_backup'), onPressed: _createBackup, icon: const Icon(Icons.lock_outline), label: Text(app.t('create_backup'))),
+              OutlinedButton.icon(key: const Key('btn_restore'), onPressed: _restore, icon: const Icon(Icons.restore), label: Text(app.t('restore_backup'))),
+            ]),
+          ),
+        ],
         ..._backups.map((b) => ListTile(dense: true, leading: const Icon(Icons.archive_outlined), title: Text('${b['name']}'), trailing: Text(fmtBytes(b['size_bytes'] as num?)))),
         _header('danger_section'),
         ListTile(
