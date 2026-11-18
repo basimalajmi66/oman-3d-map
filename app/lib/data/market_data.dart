@@ -143,23 +143,31 @@ String barsToCsv(List<Bar> bars, {bool volume = true}) {
 }
 
 class MarketDataClient {
-  MarketDataClient({http.Client? client}) : _http = client ?? http.Client();
+  MarketDataClient({http.Client? client, Duration Function(int attempt)? backoff})
+      : _http = client ?? http.Client(),
+        _backoff = backoff ?? ((a) => Duration(milliseconds: 1000 * (1 << a))); // 1, 2, 4, 8, 16 s
   final http.Client _http;
+  final Duration Function(int attempt) _backoff;
   bool _cancelled = false;
   void cancel() => _cancelled = true;
 
-  Future<http.Response> _get(Uri u) async {
+  /// GET with patience: servers that say "busy" (429 / 5xx) get growing pauses before another try.
+  Future<http.Response> _get(Uri u, {int attempts = 6}) async {
     for (var attempt = 0;; attempt++) {
+      if (_cancelled) throw MarketDataException('cancelled');
+      String problem;
       try {
-        final r = await _http.get(u, headers: {'User-Agent': 'UATA'}).timeout(const Duration(seconds: 30));
+        final r = await _http.get(u, headers: {'User-Agent': 'Mozilla/5.0 (compatible; UATA)'}).timeout(const Duration(seconds: 30));
         if (r.statusCode == 200 || r.statusCode == 404) return r;
-        if (attempt >= 2) throw MarketDataException('download failed (${r.statusCode}) for ${u.host}');
+        problem = 'download failed (${r.statusCode}) for ${u.host}';
+        if (r.statusCode != 429 && r.statusCode < 500) throw MarketDataException(problem);
       } on MarketDataException {
         rethrow;
       } catch (e) {
-        if (attempt >= 2) throw MarketDataException('no connection to ${u.host}: $e');
+        problem = 'no connection to ${u.host}: $e';
       }
-      await Future<void>.delayed(Duration(seconds: 1 + attempt * 2));
+      if (attempt + 1 >= attempts) throw MarketDataException(problem);
+      await Future<void>.delayed(_backoff(attempt));
     }
   }
 
@@ -184,19 +192,35 @@ class MarketDataClient {
       hours.add(h);
     }
     final bars = <Bar>[];
-    const parallel = 6;
+    const parallel = 3; // be gentle with the free data service
+    var failed = 0;
     for (var i = 0; i < hours.length; i += parallel) {
       if (_cancelled) throw MarketDataException('cancelled');
       final batch = hours.sublist(i, i + parallel > hours.length ? hours.length : i + parallel);
-      final files = await Future.wait(batch.map((h) => _get(Uri.parse('https://datafeed.dukascopy.com/datafeed/${a.symbol}/'
-          '${h.year}/${(h.month - 1).toString().padLeft(2, '0')}/${h.day.toString().padLeft(2, '0')}/'
-          '${h.hour.toString().padLeft(2, '0')}h_ticks.bi5'))));
+      final files = await Future.wait(batch.map((h) async {
+        try {
+          return await _get(Uri.parse('https://datafeed.dukascopy.com/datafeed/${a.symbol}/'
+              '${h.year}/${(h.month - 1).toString().padLeft(2, '0')}/${h.day.toString().padLeft(2, '0')}/'
+              '${h.hour.toString().padLeft(2, '0')}h_ticks.bi5'));
+        } on MarketDataException {
+          if (_cancelled) rethrow;
+          return null; // one missing hour is tolerated (counted below)
+        }
+      }));
       for (var k = 0; k < batch.length; k++) {
-        if (files[k].statusCode != 200) continue;
+        final f = files[k];
+        if (f == null) {
+          failed++;
+          continue;
+        }
+        if (f.statusCode != 200) continue;
         final base = batch[k].millisecondsSinceEpoch;
         // aggregate each hour right away (a phone must not hold millions of ticks)
-        final hourBars = aggregateTicks([for (final (ms, bid, vol) in decodeBi5(files[k].bodyBytes, a.pointDivisor)) (base + ms, bid, vol)], tf);
+        final hourBars = aggregateTicks([for (final (ms, bid, vol) in decodeBi5(f.bodyBytes, a.pointDivisor)) (base + ms, bid, vol)], tf);
         mergeBars(bars, hourBars);
+      }
+      if (failed > 3 && failed > hours.length * 0.05) {
+        throw MarketDataException('the data service is not answering (${u(a)}): $failed hours failed — try again later');
       }
       onProgress?.call((i + batch.length) / hours.length);
     }
@@ -229,6 +253,8 @@ class MarketDataClient {
     }
     return bars.isEmpty ? bars : bars.sublist(0, bars.length - 1);
   }
+
+  static String u(MarketAsset a) => a.source == 'dukascopy' ? 'Dukascopy' : 'Binance';
 
   void close() => _http.close();
 }

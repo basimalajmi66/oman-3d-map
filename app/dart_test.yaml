@@ -1,0 +1,4 @@
+tags:
+  network:
+    # needs internet; run explicitly with --tags network
+    skip: false

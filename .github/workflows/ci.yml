@@ -38,12 +38,16 @@ jobs:
       - run: flutter analyze
         working-directory: app
       - name: Widget tests + contract tests against the real engine
-        run: flutter test
+        run: flutter test --exclude-tags network
         working-directory: app
         env:
           UATA_BACKEND_DIR: ${{ github.workspace }}/backend
-          # live download of real prices (Dukascopy, Binance) + quick start on real data
-          UATA_NETWORK_TESTS: "1"
+      # live download of real prices (Dukascopy, Binance) + quick start on real data; an outage of a
+      # third-party data service must not turn the pipeline red, but the results stay visible here
+      - name: Live market data + quick start on real prices (non-blocking)
+        continue-on-error: true
+        run: flutter test --tags network -r expanded
+        working-directory: app
 
   android-build:
     runs-on: ubuntu-latest

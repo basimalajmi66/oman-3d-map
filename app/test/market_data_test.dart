@@ -72,4 +72,33 @@ void main() {
       expect(u.queryParameters['interval'], '1s');
     }
   });
+
+  test('a busy server (503) is retried patiently; a refused request (403) is not', () async {
+    var calls = 0;
+    final busy = MockClient((req) async => ++calls < 3 ? http.Response('busy', 503) : http.Response('[]', 200));
+    final c = MarketDataClient(client: busy, backoff: (_) => Duration.zero);
+    await expectLater(c.download(marketAssets.firstWhere((a) => a.symbol == 'BTCUSDT'), 60, days: 1),
+        throwsA(predicate((e) => e is MarketDataException && e.message.contains('too little data'))));
+    expect(calls, 3); // two busy answers, then success (empty) — no error from the retries themselves
+    var refused = 0;
+    final forbidden = MockClient((req) async {
+      refused++;
+      return http.Response('no', 403);
+    });
+    await expectLater(MarketDataClient(client: forbidden, backoff: (_) => Duration.zero).download(marketAssets.firstWhere((a) => a.symbol == 'BTCUSDT'), 60, days: 1),
+        throwsA(predicate((e) => e is MarketDataException && e.message.contains('403'))));
+    expect(refused, 1);
+  });
+
+  test('Dukascopy: a few missing hours are tolerated, a dead service is reported', () async {
+    final hourBytes = File('test/fixtures/ticks_known_size.bi5').readAsBytesSync();
+    var n = 0;
+    final flaky = MockClient((req) async => (++n % 40 == 0) ? http.Response('busy', 503) : http.Response.bytes(hourBytes, 200));
+    final until = DateTime.utc(2026, 11, 6, 12); // a Friday: no Saturday skip inside the window
+    final csv = await MarketDataClient(client: flaky, backoff: (_) => Duration.zero).download(marketAssets.first, 30, days: 4, until: until);
+    expect(csv.split('\n').where((l) => l.isNotEmpty).length - 1, greaterThan(100));
+    final dead = MockClient((req) async => http.Response('down', 503));
+    await expectLater(MarketDataClient(client: dead, backoff: (_) => Duration.zero).download(marketAssets.first, 30, days: 4, until: until),
+        throwsA(predicate((e) => e is MarketDataException && e.message.contains('not answering'))));
+  });
 }
