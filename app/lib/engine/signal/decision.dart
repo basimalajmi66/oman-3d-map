@@ -55,6 +55,9 @@ FeatureSet? _closedSeries(Map reading) {
 
 double _num(Object? v) => (v as num?)?.toDouble() ?? 0.0;
 
+/// Python truthiness for flags that may come from SQLite as 0/1.
+bool _truthy(Object? v) => v == true || (v is num && v != 0);
+
 /// `strategies`: approved strategies with their `latest_backtest`.
 Decision decide(Map reading, Map? technical, Map settings, List<Map> strategies, {List<Map>? knowledge}) {
   final d = Decision(
@@ -124,7 +127,7 @@ Decision decide(Map reading, Map? technical, Map settings, List<Map> strategies,
   final skipped = <String>[];
   for (final s in strategies) {
     final bt = s['latest_backtest'] as Map?;
-    if (s['status'] != 'approved' || bt == null || bt['qualifies'] != true || s['definition'] == null) continue;
+    if (s['status'] != 'approved' || bt == null || !_truthy(bt['qualifies']) || s['definition'] == null) continue;
     final sTf = (bt['params'] as Map?)?['timeframe_sec'];
     if (sTf != tf) {
       skipped.add('${s['name']} (tested on ${sTf}s)');
