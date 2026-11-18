@@ -42,10 +42,20 @@ jobs:
         working-directory: app
         env:
           UATA_BACKEND_DIR: ${{ github.workspace }}/backend
-      # live download of real prices (Dukascopy, Binance) + quick start on real data; an outage of a
-      # third-party data service must not turn the pipeline red, but the results stay visible here
-      - name: Live market data + quick start on real prices (non-blocking)
-        continue-on-error: true
+
+  market-live:
+    # live download of real prices (Dukascopy, Binance) + quick start on real data. Runs in parallel and
+    # never blocks the builds: an outage of a third-party data service must not turn the pipeline red.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+        working-directory: app
+      - name: Live market data + quick start on real prices
         run: flutter test --tags network -r expanded
         working-directory: app
 
