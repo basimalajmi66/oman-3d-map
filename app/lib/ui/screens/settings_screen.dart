@@ -3,11 +3,11 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/engine_api.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
+import 'companion_section.dart';
+import 'knowledge_screen.dart' show FilePickFn, pickDeviceFile;
 
 /// The GitHub Actions run that built this app (compare with the run you downloaded); 'dev' for local builds.
 const appBuild = String.fromEnvironment('UATA_BUILD', defaultValue: 'dev');
-import 'companion_section.dart';
-import 'knowledge_screen.dart' show FilePickFn, pickDeviceFile;
 
 const _timeframes = [5, 10, 15, 30, 60, 120, 180, 300, 900, 1800, 3600, 14400, 86400];
 const _durations = [30, 60, 90, 120, 180, 300, 600, 900];
