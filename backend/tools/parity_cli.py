@@ -51,6 +51,21 @@ def main() -> None:
             tech = analyze_reading(case["reading"], case["settings"].get("indicators"))
             dec = decide(case["reading"], tech, case["settings"], case["strategies"], case.get("knowledge"))
             out.append({"technical": tech, "decision": dec.to_dict()})
+    elif op == "render_read":
+        # render synthetic charts (any degradation already applied in memory), save them as lossless PNG and
+        # read them with OCR off; the Dart reader then reads the very same pixels
+        import cv2
+        from uata.vision.reader import ChartReader
+        from uata.vision.synthetic import degrade, random_walk_ohlc, render_chart, uptrend_ohlc
+        out = []
+        for case in req["cases"]:
+            ohlc = uptrend_ohlc() if case.get("uptrend") else random_walk_ohlc(case.get("n", 60), seed=case.get("seed", 0),
+                                                                             vol=case.get("vol", 0.0008))
+            img = render_chart(ohlc, **case.get("render", {})).image
+            if case.get("degrade"):
+                img = degrade(img, **case["degrade"])
+            cv2.imwrite(case["path"], img)
+            out.append(ChartReader(use_ocr=False).read(cv2.imread(case["path"])).to_dict())
     elif op == "translate":
         out = [translate_rules(r, d) for r, d in req["cases"]]
     else:
