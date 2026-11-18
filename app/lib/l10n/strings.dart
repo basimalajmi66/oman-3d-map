@@ -569,7 +569,7 @@ const Map<String, Map<String, String>> _strings = {
   'qs_asset': {'ar': 'الأصل', 'en': 'Asset'},
   'qs_payout': {'ar': 'نسبة العائد في منصتك', 'en': 'Payout on your platform'},
   'qs_payout_hint': {'ar': 'الربح عند الفوز كنسبة من المبلغ (مثلاً 85%)', 'en': 'Profit on a win as a share of the stake (e.g. 85%)'},
-  'qs_days': {'ar': 'أيام البيانات', 'en': 'Days of data'},
+  'qs_days': {'ar': 'أيام البيانات (التنزيل قد يستغرق بضع دقائق)', 'en': 'Days of data (the download may take a few minutes)'},
   'qs_consent': {'ar': 'أسمح بتنزيل أسعار عامة من الإنترنت (Dukascopy / Binance)', 'en': 'Allow downloading public prices from the internet (Dukascopy / Binance)'},
   'qs_consent_hint': {'ar': 'يُرسل فقط اسم الأصل والتواريخ. لا يُرسل أي شيء عنك أو عن بياناتك.', 'en': 'Only the asset name and dates are sent — nothing about you or your data.'},
   'qs_start': {'ar': 'ابدأ', 'en': 'Start'},
