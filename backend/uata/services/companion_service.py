@@ -77,7 +77,7 @@ def lan_addresses() -> list[str]:
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
             ip = info[4][0]
-            if ip not in out and not ip.startswith("127."):
+            if ip not in out and not ip.startswith(("127.", "169.254.")):  # loopback / link-local
                 out.append(ip)
     except OSError:
         pass
@@ -192,9 +192,12 @@ class CompanionService:
         code = secrets.token_urlsafe(9)
         with self._lock:
             self._pairing = _Pairing(code, time.monotonic() + PAIRING_TTL_SEC)
-        addrs = lan_addresses()
+        # every address of this computer (Wi-Fi, Ethernet, ...): the phone tries them in turn, and the pinned
+        # certificate guarantees it is always this computer whichever address answers
+        addrs = lan_addresses()[:6]
         host = addrs[0] if addrs else "127.0.0.1"
-        uri = "uata://pair?" + urlencode({"h": host, "p": self.port, "fp": self.fingerprint, "c": code})
+        uri = "uata://pair?" + urlencode({"h": ",".join(addrs or [host]), "p": self.port,
+                                         "fp": self.fingerprint, "c": code})
         return {"uri": uri, "code": code, "host": host, "addresses": addrs, "port": self.port,
                 "fingerprint": self.fingerprint, "expires_in_sec": PAIRING_TTL_SEC}
 

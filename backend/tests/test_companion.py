@@ -177,3 +177,10 @@ def test_allow_list_is_narrow():
     assert not cs.lan_allowed("GET", "/backups/x.uatabak")
     assert not cs.lan_allowed("GET", "/settingsX")
     assert not cs.lan_allowed("PATCH", "/settings")
+
+
+def test_qr_carries_every_lan_address(client, lan, monkeypatch):
+    monkeypatch.setattr(cs, "lan_addresses", lambda: ["192.168.1.20", "10.0.0.5"])
+    p = client.post("/companion/pairing").json()
+    assert parse_qs(urlparse(p["uri"]).query)["h"] == ["192.168.1.20,10.0.0.5"]
+    assert p["host"] == "192.168.1.20" and p["addresses"] == ["192.168.1.20", "10.0.0.5"]

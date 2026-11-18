@@ -13,8 +13,17 @@ import 'http_engine_api.dart';
 
 /// What the QR code on the computer contains: `uata://pair?h=<ip>&p=<port>&fp=<sha256>&c=<code>`.
 class PairingLink {
-  PairingLink({required this.host, required this.port, required this.fingerprint, required this.code});
-  final String host;
+  PairingLink({
+    required String host,
+    List<String>? hosts,
+    required this.port,
+    required this.fingerprint,
+    required this.code,
+  }) : hosts = hosts ?? [host];
+
+  /// Every address of the computer (Wi-Fi, Ethernet, ...), tried in turn.
+  final List<String> hosts;
+  String get host => hosts.first;
   final int port;
   final String fingerprint; // lowercase hex SHA-256 of the engine's certificate (DER)
   final String code;
@@ -26,28 +35,56 @@ class PairingLink {
     final q = u.queryParameters;
     final port = int.tryParse(q['p'] ?? '');
     final fp = (q['fp'] ?? '').toLowerCase();
-    if ((q['h'] ?? '').isEmpty || port == null || !RegExp(r'^[0-9a-f]{64}$').hasMatch(fp) ||
-        (q['c'] ?? '').isEmpty) {
+    final hosts = (q['h'] ?? '').split(',').map((h) => h.trim()).where((h) => h.isNotEmpty).toList();
+    if (hosts.isEmpty || port == null || !RegExp(r'^[0-9a-f]{64}$').hasMatch(fp) || (q['c'] ?? '').isEmpty) {
       return null;
     }
-    return PairingLink(host: q['h']!, port: port, fingerprint: fp, code: q['c']!);
+    return PairingLink(host: hosts.first, hosts: hosts, port: port, fingerprint: fp, code: q['c']!);
   }
 }
 
 /// A completed pairing, kept in the app's private storage.
 class CompanionPairing {
-  CompanionPairing({required this.host, required this.port, required this.fingerprint, required this.token});
+  CompanionPairing({
+    required this.host,
+    List<String>? hosts,
+    required this.port,
+    required this.fingerprint,
+    required this.token,
+  }) : hosts = hosts ?? [host];
   final String host;
+
+  /// All known addresses of the computer, [host] (the one that answered last) first.
+  final List<String> hosts;
   final int port;
   final String fingerprint;
   final String token;
 
-  Uri get baseUrl => Uri(scheme: 'https', host: host, port: port);
+  Uri get baseUrl => urlFor(host);
+  Uri urlFor(String h) => Uri(scheme: 'https', host: h, port: port);
 
-  Map<String, dynamic> toJson() => {'host': host, 'port': port, 'fingerprint': fingerprint, 'token': token};
+  CompanionPairing preferring(String h) => CompanionPairing(
+    host: h,
+    hosts: [h, ...hosts.where((x) => x != h)],
+    port: port,
+    fingerprint: fingerprint,
+    token: token,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'host': host,
+    'hosts': hosts,
+    'port': port,
+    'fingerprint': fingerprint,
+    'token': token,
+  };
   static CompanionPairing fromJson(Map<String, dynamic> j) => CompanionPairing(
-      host: j['host'] as String, port: j['port'] as int, fingerprint: j['fingerprint'] as String,
-      token: j['token'] as String);
+    host: j['host'] as String,
+    hosts: (j['hosts'] as List?)?.cast<String>(),
+    port: j['port'] as int,
+    fingerprint: j['fingerprint'] as String,
+    token: j['token'] as String,
+  );
 }
 
 String certificateFingerprint(X509Certificate cert) => sha256.convert(cert.der).toString();
@@ -97,23 +134,56 @@ class CompanionStore {
 }
 
 /// Exchange the one-time code for this device's token (over the pinned TLS connection).
+/// Each address in the link is tried until one answers; an answer that refuses the code ends it.
 Future<CompanionPairing> pairWithComputer(PairingLink link, String deviceName, {http.Client? client}) async {
   final c = client ?? pinnedClient(link.fingerprint);
+  EngineException? last;
   try {
-    final r = await c
-        .post(Uri(scheme: 'https', host: link.host, port: link.port, path: '/companion/pair'),
-            headers: {'content-type': 'application/json'}, body: jsonEncode({'code': link.code, 'name': deviceName}))
-        .timeout(const Duration(seconds: 15));
-    final body = r.bodyBytes.isEmpty ? null : jsonDecode(utf8.decode(r.bodyBytes));
-    if (r.statusCode != 200) {
-      throw EngineException(r.statusCode, body is Map ? '${body['detail']}' : 'pairing failed');
+    for (final h in link.hosts) {
+      http.Response r;
+      try {
+        r = await c
+            .post(
+              Uri(scheme: 'https', host: h, port: link.port, path: '/companion/pair'),
+              headers: {'content-type': 'application/json'},
+              body: jsonEncode({'code': link.code, 'name': deviceName}),
+            )
+            .timeout(const Duration(seconds: 10));
+      } catch (e) {
+        last = EngineException(0, 'computer unreachable at $h: $e');
+        continue; // try the next address
+      }
+      final body = r.bodyBytes.isEmpty ? null : jsonDecode(utf8.decode(r.bodyBytes));
+      if (r.statusCode != 200) {
+        throw EngineException(r.statusCode, body is Map ? '${body['detail']}' : 'pairing failed');
+      }
+      return CompanionPairing(
+        host: h,
+        hosts: link.hosts,
+        port: link.port,
+        fingerprint: link.fingerprint,
+        token: (body as Map)['token'] as String,
+      ).preferring(h);
     }
-    return CompanionPairing(
-        host: link.host, port: link.port, fingerprint: link.fingerprint, token: (body as Map)['token'] as String);
-  } on EngineException {
-    rethrow;
-  } catch (e) {
-    throw EngineException(0, 'computer unreachable: $e');
+    throw last ?? EngineException(0, 'computer unreachable');
+  } finally {
+    if (client == null) c.close();
+  }
+}
+
+/// The first address of the computer that answers (pinned TLS), or null if none does.
+Future<String?> reachableHost(CompanionPairing p, {http.Client? client}) async {
+  final c = client ?? pinnedClient(p.fingerprint, connectTimeout: const Duration(seconds: 3));
+  try {
+    for (final h in p.hosts) {
+      try {
+        final r = await c.get(p.urlFor(h).replace(path: '/health')).timeout(const Duration(seconds: 4));
+        if (r.statusCode == 200) return h;
+      } catch (_) {
+        // next address
+      }
+    }
+    return null;
   } finally {
     if (client == null) c.close();
   }
@@ -128,13 +198,23 @@ class RemoteEngineHost implements EngineHost {
   String get kind => 'remote';
 
   @override
-  Future<EngineApi> connect() async => HttpEngineApi(
-        baseUrl: pairing.baseUrl,
-        tokenProvider: () async => pairing.token,
-        authHeader: 'X-UATA-Device',
-        client: pinnedClient(pairing.fingerprint),
-        timeout: const Duration(seconds: 30),
-      );
+  Future<EngineApi> connect() async {
+    var p = pairing;
+    if (p.hosts.length > 1) {
+      final h = await reachableHost(p);
+      if (h != null && h != p.host) {
+        p = p.preferring(h);
+        await CompanionStore.save(p); // remember the address that works
+      }
+    }
+    return HttpEngineApi(
+      baseUrl: p.baseUrl,
+      tokenProvider: () async => pairing.token,
+      authHeader: 'X-UATA-Device',
+      client: pinnedClient(p.fingerprint),
+      timeout: const Duration(seconds: 30),
+    );
+  }
 
   @override
   void dispose() {}

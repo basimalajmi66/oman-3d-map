@@ -272,7 +272,17 @@ void main() {
     final wrong = PairingLink(host: '127.0.0.1', port: link.port, fingerprint: 'ab' * 32, code: link.code);
     await expectLater(pairWithComputer(wrong, 'evil'), throwsA(isA<EngineException>()));
 
-    final paired = await pairWithComputer(local, 'Contract phone');
+    // the first address does not answer (TEST-NET): the phone moves on to the next one
+    final multi = PairingLink(
+        host: '192.0.2.1', hosts: ['192.0.2.1', '127.0.0.1'], port: link.port, fingerprint: link.fingerprint,
+        code: link.code);
+    final paired = await pairWithComputer(multi, 'Contract phone');
+    expect(paired.host, '127.0.0.1');
+    expect(paired.hosts, ['127.0.0.1', '192.0.2.1']);
+    final stale = CompanionPairing(
+        host: '192.0.2.1', hosts: ['192.0.2.1', '127.0.0.1'], port: link.port, fingerprint: link.fingerprint,
+        token: paired.token);
+    expect(await reachableHost(stale), '127.0.0.1');
     await expectLater(pairWithComputer(local, 'again'), // the code is one-time
         throwsA(predicate((e) => e is EngineException && e.statusCode == 401)));
 

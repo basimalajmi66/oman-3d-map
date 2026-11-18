@@ -24,6 +24,17 @@ void main() {
       expect(l.code, 'Xy_9');
     });
 
+    test('carries every address of the computer', () {
+      final l = PairingLink.tryParse('uata://pair?h=10.0.0.5,192.168.1.20,&p=8766&fp=$fp&c=x')!;
+      expect(l.hosts, ['10.0.0.5', '192.168.1.20']);
+      expect(l.host, '10.0.0.5');
+      final p = CompanionPairing(host: 'a', hosts: ['a', 'b'], port: 1, fingerprint: fp, token: 't').preferring('b');
+      expect(p.host, 'b');
+      expect(CompanionPairing.fromJson(p.toJson()).hosts, ['b', 'a']);
+      // pairings saved before multi-address support still load
+      expect(CompanionPairing.fromJson({'host': 'h', 'port': 1, 'fingerprint': fp, 'token': 't'}).hosts, ['h']);
+    });
+
     test('rejects anything incomplete or foreign', () {
       for (final bad in [
         'https://evil.example/pair?h=1&p=1&fp=$fp&c=x',
