@@ -11,8 +11,9 @@ import 'starter_strategies.dart';
 enum QuickStartStage { downloading, importing, strategies, testing, done }
 
 class StrategyOutcome {
-  StrategyOutcome(this.strategyId, this.name, this.idea, this.result);
+  StrategyOutcome(this.strategyId, this.name, this.idea, this.result, {this.durationSec = 120});
   final int strategyId;
+  final int durationSec; // the tested trade duration
   final String name, idea;
   final Json result; // backtest result: qualifies, gate_reasons, out_of_sample, …
   bool get qualifies => result['qualifies'] == true;
@@ -67,7 +68,7 @@ Future<QuickStartResult> runQuickStart(
     onStage?.call(QuickStartStage.testing, i / ids.length);
     final (st, id) = ids[i];
     final r = await api.backtest(id, dataset['id'] as int, payout: payout);
-    outcomes.add(StrategyOutcome(id, st.name, lang == 'ar' ? st.ar : st.en, r));
+    outcomes.add(StrategyOutcome(id, st.name, lang == 'ar' ? st.ar : st.en, r, durationSec: st.definition['duration_sec'] as int));
   }
   outcomes.sort((a, b) {
     if (a.qualifies != b.qualifies) return a.qualifies ? -1 : 1;

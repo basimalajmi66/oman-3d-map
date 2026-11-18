@@ -563,6 +563,7 @@ const Map<String, Map<String, String>> _strings = {
   'mode_switch_to_computer': {'ar': 'التبديل إلى الاتصال بكمبيوتري', 'en': 'Switch to: connect to my computer'},
   'mode_switch_to_local': {'ar': 'التبديل إلى العمل على هذا الهاتف فقط', 'en': 'Switch to: on this phone only'},
   'mode_recommended': {'ar': 'موصى به', 'en': 'Recommended'},
+  'qs_approve_raise': {'ar': 'اعتماد ورفع الحد الأقصى للمدة إلى {s} ثانية', 'en': 'Approve and raise the maximum duration to {s} s'},
   'qs_title': {'ar': 'البدء السريع', 'en': 'Quick start'},
   'qs_open': {'ar': 'البدء السريع: بيانات حقيقية + استراتيجيات جاهزة', 'en': 'Quick start: real data + ready-made strategies'},
   'qs_intro': {'ar': 'بضغطة واحدة: ينزّل البرنامج أسعاراً حقيقية للأصل الذي تختاره، ويضيف 8 استراتيجيات معروفة كمسودات، ويختبرها كلها على هذه الأسعار، ثم يعرض لك النتائج بصدق. أنت من يعتمد ما يجتاز الاختبار.', 'en': 'One tap: the app downloads real prices for the asset you pick, adds 8 well-known strategies as drafts, tests them all on those prices and shows you the honest results. You approve what passes.'},

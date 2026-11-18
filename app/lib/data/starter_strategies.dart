@@ -96,4 +96,124 @@ const starterStrategies = <StarterStrategy>[
       'duration_sec': 60,
     },
   ),
+  StarterStrategy(
+    'تشبع مزدوج: RSI مع بولينجر',
+    'شراء عند تشبع بيع شديد (RSI أقل من 25) مع إغلاق تحت حد بولينجر السفلي، والعكس للبيع.',
+    'Buy on deep oversold (RSI < 25) with a close below the lower Bollinger band; the reverse to sell.',
+    {
+      'long': {'all': [{'id': 'rsi_below', 'value': 25}, {'id': 'bb_below_lower'}]},
+      'short': {'all': [{'id': 'rsi_above', 'value': 75}, {'id': 'bb_above_upper'}]},
+      'duration_sec': 180,
+    },
+  ),
+  StarterStrategy(
+    'ارتداد RSI في السوق العرضي',
+    'في السوق العرضي فقط: شراء عند RSI أقل من 30 وبيع عند RSI أعلى من 70.',
+    'Ranging markets only: buy at RSI < 30, sell at RSI > 70.',
+    {
+      'long': {'all': [{'id': 'rsi_below', 'value': 30}, {'id': 'market', 'condition': 'ranging'}]},
+      'short': {'all': [{'id': 'rsi_above', 'value': 70}, {'id': 'market', 'condition': 'ranging'}]},
+      'duration_sec': 120,
+    },
+  ),
+  StarterStrategy(
+    'التصحيح تحت EMA 9 في اتجاه صاعد',
+    'اتجاه صاعد والسعر فوق EMA 50، ثم تصحيح تحت EMA 9 تليه شمعة صاعدة للشراء؛ والعكس للبيع.',
+    'Uptrend above EMA 50, a dip below EMA 9 and a bullish candle to buy; the reverse to sell.',
+    {
+      'long': {'all': [{'id': 'trend_up'}, {'id': 'price_above_ema', 'period': 50}, {'id': 'price_below_ema', 'period': 9}, {'id': 'bullish_candle'}]},
+      'short': {'all': [{'id': 'trend_down'}, {'id': 'price_below_ema', 'period': 50}, {'id': 'price_above_ema', 'period': 9}, {'id': 'bearish_candle'}]},
+      'duration_sec': 120,
+    },
+  ),
+  StarterStrategy(
+    'نجمة الصباح ونجمة المساء',
+    'نمط نجمة الصباح بعد هبوط للشراء، ونجمة المساء بعد صعود للبيع.',
+    'Morning star after a decline to buy, evening star after a rise to sell.',
+    {
+      'long': {'all': [{'id': 'pattern', 'name': 'morning_star'}]},
+      'short': {'all': [{'id': 'pattern', 'name': 'evening_star'}]},
+      'duration_sec': 180,
+    },
+  ),
+  StarterStrategy(
+    'الابتلاع مع الاتجاه',
+    'ابتلاعي صاعد في اتجاه صاعد للشراء، وابتلاعي هابط في اتجاه هابط للبيع.',
+    'Bullish engulfing in an uptrend to buy, bearish engulfing in a downtrend to sell.',
+    {
+      'long': {'all': [{'id': 'pattern', 'name': 'bullish_engulfing'}, {'id': 'trend_up'}]},
+      'short': {'all': [{'id': 'pattern', 'name': 'bearish_engulfing'}, {'id': 'trend_down'}]},
+      'duration_sec': 120,
+    },
+  ),
+  StarterStrategy(
+    'تقاطع MACD من منطقة الضعف',
+    'تقاطع MACD صاعد و RSI أقل من 45 للشراء، وتقاطع هابط و RSI أعلى من 55 للبيع.',
+    'Bullish MACD cross with RSI < 45 to buy, bearish cross with RSI > 55 to sell.',
+    {
+      'long': {'all': [{'id': 'macd_cross_up'}, {'id': 'rsi_below', 'value': 45}]},
+      'short': {'all': [{'id': 'macd_cross_down'}, {'id': 'rsi_above', 'value': 55}]},
+      'duration_sec': 180,
+    },
+  ),
+  StarterStrategy(
+    'الاختراق في سوق متجه',
+    'اختراق مقاومة في سوق متجه صاعد للشراء، وكسر دعم في سوق متجه هابط للبيع.',
+    'Breakout in a trending up-market to buy, breakdown in a trending down-market to sell.',
+    {
+      'long': {'all': [{'id': 'breakout_up'}, {'id': 'market', 'condition': 'trending'}, {'id': 'trend_up'}]},
+      'short': {'all': [{'id': 'breakdown'}, {'id': 'market', 'condition': 'trending'}, {'id': 'trend_down'}]},
+      'duration_sec': 300,
+    },
+  ),
+  StarterStrategy(
+    'الدوجي عند الدعم والمقاومة',
+    'شمعة دوجي (تردد) قرب دعم للشراء، وقرب مقاومة للبيع.',
+    'A doji (indecision) near support to buy, near resistance to sell.',
+    {
+      'long': {'all': [{'id': 'pattern', 'name': 'doji'}, {'id': 'near_support'}]},
+      'short': {'all': [{'id': 'pattern', 'name': 'doji'}, {'id': 'near_resistance'}]},
+      'duration_sec': 120,
+    },
+  ),
+  StarterStrategy(
+    'ركوب الزخم مع ترتيب المتوسطات',
+    'EMA 9 > 21 > 50 مع هيستوجرام MACD موجب والسعر فوق EMA 9 للشراء؛ والعكس للبيع.',
+    'EMA 9 > 21 > 50 with a positive MACD histogram and price above EMA 9 to buy; the reverse to sell.',
+    {
+      'long': {'all': [{'id': 'ema_bull_alignment'}, {'id': 'macd_positive'}, {'id': 'price_above_ema', 'period': 9}]},
+      'short': {'all': [{'id': 'ema_bear_alignment'}, {'id': 'macd_negative'}, {'id': 'price_below_ema', 'period': 9}]},
+      'duration_sec': 300,
+    },
+  ),
+  StarterStrategy(
+    'إنهاك الحركة (عكس الزخم)',
+    'هبوط حاد (أكثر من 2 ATR) مع RSI أقل من 25 للشراء، وصعود حاد مع RSI أعلى من 75 للبيع.',
+    'A sharp drop (over 2 ATR) with RSI < 25 to buy, a sharp rise with RSI > 75 to sell.',
+    {
+      'long': {'all': [{'id': 'momentum_down', 'atr': 2.0}, {'id': 'rsi_below', 'value': 25}]},
+      'short': {'all': [{'id': 'momentum_up', 'atr': 2.0}, {'id': 'rsi_above', 'value': 75}]},
+      'duration_sec': 120,
+    },
+  ),
+  StarterStrategy(
+    'المطرقة المقلوبة والرجل المشنوق',
+    'مطرقة مقلوبة قرب دعم للشراء، ورجل مشنوق قرب مقاومة للبيع.',
+    'Inverted hammer near support to buy, hanging man near resistance to sell.',
+    {
+      'long': {'all': [{'id': 'pattern', 'name': 'inverted_hammer'}, {'id': 'near_support'}]},
+      'short': {'all': [{'id': 'pattern', 'name': 'hanging_man'}, {'id': 'near_resistance'}]},
+      'duration_sec': 180,
+    },
+  ),
+  StarterStrategy(
+    'الارتداد في السوق المتقلب',
+    'في السوق المتقلب: إغلاق تحت بولينجر السفلي مع شمعة صاعدة للشراء، وفوق العلوي مع شمعة هابطة للبيع.',
+    'Volatile markets: a close below the lower band on a bullish candle to buy, above the upper band on a bearish candle to sell.',
+    {
+      'long': {'all': [{'id': 'bb_below_lower'}, {'id': 'market', 'condition': 'volatile'}, {'id': 'bullish_candle'}]},
+      'short': {'all': [{'id': 'bb_above_upper'}, {'id': 'market', 'condition': 'volatile'}, {'id': 'bearish_candle'}]},
+      'duration_sec': 60,
+    },
+  ),
 ];

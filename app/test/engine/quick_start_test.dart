@@ -9,6 +9,7 @@ import 'package:uata_app/data/market_data.dart';
 import 'package:uata_app/data/quick_start.dart';
 import 'package:uata_app/data/starter_strategies.dart';
 import 'package:uata_app/engine/local/local_engine_api.dart';
+import 'package:uata_app/engine/strategy/conditions.dart' as cnd;
 
 Future<String> schema(int v) => File('assets/schema/schema_v$v.sql').readAsString();
 
@@ -30,6 +31,18 @@ class FakeData extends MarketDataClient {
 }
 
 void main() {
+  test('every starter strategy is valid, unique and lasts 1 to 5 minutes', () {
+    expect(starterStrategies, hasLength(20));
+    expect(starterStrategies.map((s) => s.name).toSet(), hasLength(20));
+    for (final s in starterStrategies) {
+      final d = cnd.validateDefinition(s.definition); // throws on any unknown condition / parameter
+      expect(d['duration_sec'], inInclusiveRange(60, 300), reason: s.name);
+      expect(s.ar, isNotEmpty);
+      expect(s.en, isNotEmpty);
+    }
+  });
+
+
   late Directory dir;
   late LocalEngine engine;
   late LocalEngineApi api;

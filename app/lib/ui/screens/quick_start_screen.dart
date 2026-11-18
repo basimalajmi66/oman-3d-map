@@ -76,6 +76,11 @@ class _QuickStartScreenState extends State<QuickStartScreen> {
 
   Future<void> _approve(StrategyOutcome o) async {
     await runWithFeedback(context, () async {
+      final max = app.settings['trade_duration_max_sec'] as int? ?? 180;
+      if (o.durationSec > max) {
+        // the button said so explicitly: without this the approved strategy could never signal
+        await app.updateSettings({'trade_duration_max_sec': o.durationSec});
+      }
       await app.engine.approveStrategy(o.strategyId);
       if (mounted) setState(() => _approved.add(o.strategyId));
     }, successKey: 'approved');
@@ -165,7 +170,7 @@ class _QuickStartScreenState extends State<QuickStartScreen> {
               Text('${app.t('qs_oos_trades')}: ${o.oos['trades']}  ·  ${app.t('qs_win_rate')}: ${_pct(o.oos['win_rate'])}'
                   '${o.oos['win_rate_ci95'] is List ? ' (${_pct((o.oos['win_rate_ci95'] as List)[0])}–${_pct((o.oos['win_rate_ci95'] as List)[1])})' : ''}'
                   '  ·  ${app.t('qs_breakeven')}: ${_pct(o.oos['breakeven_win_rate'])}'),
-              Text('${app.t('qs_expectancy')}: ${o.oos['expectancy_per_trade'] ?? '—'}'),
+              Text('${app.t('qs_expectancy')}: ${o.oos['expectancy_per_trade'] ?? '—'}  ·  ${app.t('duration')}: ${o.durationSec ~/ 60 > 0 && o.durationSec % 60 == 0 ? '${o.durationSec ~/ 60}m' : '${o.durationSec}s'}'),
               if (!o.qualifies)
                 Text([for (final g in (o.result['gate_reasons'] as List)) app.t('g_$g')].join(' · '),
                     style: const TextStyle(color: SignalColors.wait)),
@@ -174,7 +179,12 @@ class _QuickStartScreenState extends State<QuickStartScreen> {
                   alignment: AlignmentDirectional.centerEnd,
                   child: _approved.contains(o.strategyId)
                       ? Chip(label: Text(app.t('approved')))
-                      : FilledButton(key: Key('qs_approve_${o.strategyId}'), onPressed: () => _approve(o), child: Text(app.t('approve_strategy'))),
+                      : FilledButton(
+                          key: Key('qs_approve_${o.strategyId}'),
+                          onPressed: () => _approve(o),
+                          child: Text(o.durationSec > (app.settings['trade_duration_max_sec'] as int? ?? 180)
+                              ? app.t('qs_approve_raise').replaceAll('{s}', '${o.durationSec}')
+                              : app.t('approve_strategy'))),
                 ),
             ]),
           ),
