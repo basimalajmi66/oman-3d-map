@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,11 +61,25 @@ http.Client pinnedClient(String fingerprint, {Duration connectTimeout = const Du
   return IOClient(io);
 }
 
+/// Where the pairing (with this device's token) is kept: the Android Keystore /
+/// iOS Keychain (this device only, never synced). A pairing saved by an older
+/// version in plain SharedPreferences is moved there on first load.
 class CompanionStore {
   static const _key = 'uata.companion.pairing';
+  static const _secure = FlutterSecureStorage(
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
+    mOptions: MacOsOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
 
   static Future<CompanionPairing?> load() async {
-    final raw = (await SharedPreferences.getInstance()).getString(_key);
+    var raw = await _secure.read(key: _key);
+    final prefs = await SharedPreferences.getInstance();
+    final legacy = prefs.getString(_key);
+    if (legacy != null) {
+      raw ??= legacy;
+      await _secure.write(key: _key, value: raw);
+      await prefs.remove(_key); // never leave the token in plain storage
+    }
     if (raw == null) return null;
     try {
       return CompanionPairing.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
@@ -73,10 +88,12 @@ class CompanionStore {
     }
   }
 
-  static Future<void> save(CompanionPairing p) async =>
-      (await SharedPreferences.getInstance()).setString(_key, jsonEncode(p.toJson()));
+  static Future<void> save(CompanionPairing p) => _secure.write(key: _key, value: jsonEncode(p.toJson()));
 
-  static Future<void> clear() async => (await SharedPreferences.getInstance()).remove(_key);
+  static Future<void> clear() async {
+    await _secure.delete(key: _key);
+    await (await SharedPreferences.getInstance()).remove(_key);
+  }
 }
 
 /// Exchange the one-time code for this device's token (over the pinned TLS connection).

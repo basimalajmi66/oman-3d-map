@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -36,18 +37,33 @@ void main() {
       }
     });
 
-    test('pairing is stored and can be cleared', () async {
+    test('pairing is stored in secure storage and can be cleared', () async {
       SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
       expect(await CompanionStore.load(), isNull);
       await CompanionStore.save(CompanionPairing(host: 'h', port: 1, fingerprint: fp, token: 't'));
       expect((await CompanionStore.load())!.baseUrl.toString(), 'https://h:1');
+      expect((await SharedPreferences.getInstance()).getKeys(), isEmpty); // token not in plain storage
+      expect(await const FlutterSecureStorage().read(key: 'uata.companion.pairing'), contains('"token":"t"'));
       await CompanionStore.clear();
       expect(await CompanionStore.load(), isNull);
+    });
+
+    test('a pairing left in plain storage by an older version is moved to secure storage', () async {
+      SharedPreferences.setMockInitialValues(
+          {'uata.companion.pairing': '{"host":"h","port":2,"fingerprint":"$fp","token":"old"}'});
+      FlutterSecureStorage.setMockInitialValues({});
+      expect((await CompanionStore.load())!.token, 'old');
+      expect((await SharedPreferences.getInstance()).getString('uata.companion.pairing'), isNull);
+      expect(await const FlutterSecureStorage().read(key: 'uata.companion.pairing'), contains('"token":"old"'));
     });
   });
 
   group('pairing screen (phone)', () {
-    setUp(() => SharedPreferences.setMockInitialValues({}));
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
+    });
 
     testWidgets('invalid link shows an error and does not call the computer', (tester) async {
       var calls = 0;
