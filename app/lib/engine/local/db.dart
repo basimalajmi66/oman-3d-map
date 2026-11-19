@@ -90,7 +90,42 @@ class LocalDb {
     await migrate(schema);
   }
 
+  /// Consistent copy of the live database (safe while in use).
+  void copyTo(String dest) {
+    final f = File(dest);
+    if (f.existsSync()) f.deleteSync();
+    _db.execute('VACUUM INTO ?', [dest]);
+  }
+
+  int schemaVersion() => _db.select('SELECT max(version) AS v FROM schema_migrations').first['v'] as int? ?? 0;
+
+  /// Swap in another database file (a validated backup), then upgrade it to the current schema.
+  Future<int> replaceWith(String source, SchemaLoader schema) async {
+    _db.close();
+    for (final suffix in ['', '-wal', '-shm']) {
+      final f = File('$path$suffix');
+      if (f.existsSync()) f.deleteSync();
+    }
+    File(source).copySync(path);
+    _db = _connect(path);
+    return migrate(schema);
+  }
+
   void close() => _db.close();
+}
+
+/// True when `path` is an intact SQLite database.
+bool sqliteIntegrityOk(String path) {
+  try {
+    final d = sqlite3.open(path, mode: OpenMode.readOnly);
+    try {
+      return d.select('PRAGMA integrity_check').first.values.first == 'ok';
+    } finally {
+      d.close();
+    }
+  } catch (_) {
+    return false;
+  }
 }
 
 /// A row as a map; `*_json` columns are decoded (`tags_json` → `tags`), like the Python `row_to_dict`.

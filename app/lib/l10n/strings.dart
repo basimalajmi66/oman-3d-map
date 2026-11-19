@@ -566,6 +566,8 @@ const Map<String, Map<String, String>> _strings = {
   'qs_approve_raise': {'ar': 'اعتماد ورفع الحد الأقصى للمدة إلى {s} ثانية', 'en': 'Approve and raise the maximum duration to {s} s'},
   'qs_empty_hint': {'ar': 'لا تعرف من أين تبدأ؟ «البدء السريع» ينزّل أسعاراً حقيقية ويضيف 20 استراتيجية معروفة ويختبرها لك.', 'en': 'Not sure where to start? Quick start downloads real prices, adds 20 well-known strategies and tests them for you.'},
   'app_build': {'ar': 'رقم النسخة (رقم التشغيل في GitHub)', 'en': 'Build number (GitHub run)'},
+  'backup_save_copy': {'ar': 'حفظ نسخة خارج التطبيق', 'en': 'Save a copy outside the app'},
+  'backup_copy_hint': {'ar': 'النسخة مشفرة بعبارة المرور. احفظ نسخة خارج التطبيق (التنزيلات، Google Drive، الكمبيوتر) لتبقى بياناتك إن فُقد الجهاز أو حُذف التطبيق. تفتح على الهاتف والكمبيوتر معاً.', 'en': 'Backups are encrypted with your passphrase. Save a copy outside the app (Downloads, Google Drive, your computer) so your data survives a lost phone or an uninstall. They open on phone and computer alike.'},
   'qs_title': {'ar': 'البدء السريع', 'en': 'Quick start'},
   'qs_open': {'ar': 'البدء السريع: بيانات حقيقية + استراتيجيات جاهزة', 'en': 'Quick start: real data + ready-made strategies'},
   'qs_intro': {'ar': 'بضغطة واحدة: ينزّل البرنامج أسعاراً حقيقية للأصل الذي تختاره، ويضيف 8 استراتيجيات معروفة كمسودات، ويختبرها كلها على هذه الأسعار، ثم يعرض لك النتائج بصدق. أنت من يعتمد ما يجتاز الاختبار.', 'en': 'One tap: the app downloads real prices for the asset you pick, adds 8 well-known strategies as drafts, tests them all on those prices and shows you the honest results. You approve what passes.'},

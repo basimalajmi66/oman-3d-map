@@ -41,19 +41,18 @@ void main() {
   test('features not on the phone yet say so (501) instead of pretending', () async {
     final caps = await api.capabilities();
     expect(caps['engine'], 'phone');
-    for (final k in ['knowledge', 'videos', 'backups', 'companion', 'screen_capture', 'ocr']) {
+    for (final k in ['knowledge', 'videos', 'companion', 'screen_capture', 'ocr']) {
       expect(caps[k], false, reason: k);
     }
     for (final call in <Future<Object?> Function()>[
       () => api.listSources(),
       () => api.listVideos(),
-      () => api.createBackup('a long enough passphrase'),
       () => api.captureScreen(),
       () => api.companionPairing(),
     ]) {
       await expectLater(call(), throwsA(predicate((e) => e is EngineException && e.statusCode == 501)));
     }
-    expect(await api.listBackups(), isEmpty);
+    expect(caps['backups'], true);
   });
 
   test('validation errors use the same codes as the computer engine', () async {

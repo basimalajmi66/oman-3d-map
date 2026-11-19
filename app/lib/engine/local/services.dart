@@ -279,6 +279,7 @@ class StrategyService {
   final LocalDb db;
   final String filesDir;
   final _fsCache = <int, (FeatureSet, Map<String, dynamic>)>{};
+  void clearCache() => _fsCache.clear(); // after a restore or wipe, dataset ids mean other data
 
   Map<String, dynamic> _storeDataset(String name, String? asset, ds.OhlcData d, bool synthetic) {
     final id = db.session((x) {

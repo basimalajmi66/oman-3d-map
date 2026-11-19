@@ -66,6 +66,33 @@ def main() -> None:
                 img = degrade(img, **case["degrade"])
             cv2.imwrite(case["path"], img)
             out.append(ChartReader(use_ocr=False).read(cv2.imread(case["path"])).to_dict())
+    elif op == "backup_make":
+        # a computer-side backup with known content, for the phone to restore
+        from uata.api.app import build_services
+        from uata.config import Paths
+        paths = Paths(Path(req["dir"])).ensure()
+        svc = build_services(paths)
+        svc.strategies.create("From the computer", {"long": {"all": [{"id": "bullish_candle"}]}, "duration_sec": 60})
+        svc.settings.update({"language": "en"})
+        (paths.files_dir / "datasets").mkdir(parents=True, exist_ok=True)
+        (paths.files_dir / "datasets" / "note.txt").write_text("hello from the computer")
+        out = {"path": str(svc.backup.create(req["passphrase"]))}
+    elif op == "backup_read":
+        # open a phone-made backup with the computer's code and report what is inside
+        import io, sqlite3, tempfile, zipfile
+        from uata.services.backup_service import decrypt_stream
+        buf = io.BytesIO()
+        with open(req["path"], "rb") as src:
+            decrypt_stream(src, buf, req["passphrase"])
+        z = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
+        with tempfile.TemporaryDirectory() as tmp:
+            z.extract("uata.sqlite3", tmp)
+            con = sqlite3.connect(Path(tmp) / "uata.sqlite3")
+            out = {"manifest": json.loads(z.read("manifest.json")), "names": sorted(z.namelist()),
+                   "strategies": [r[0] for r in con.execute("SELECT name FROM strategies ORDER BY id")],
+                   "signals": con.execute("SELECT count(*) FROM signals").fetchone()[0],
+                   "integrity": con.execute("PRAGMA integrity_check").fetchone()[0]}
+            con.close()
     elif op == "translate":
         out = [translate_rules(r, d) for r, d in req["cases"]]
     else:

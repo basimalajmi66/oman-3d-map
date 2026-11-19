@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/engine_api.dart';
@@ -18,9 +21,16 @@ const _indicators = [
 ];
 
 /// Every user setting is editable here and persisted by the engine.
+typedef SaveFileFn = Future<bool> Function(String name, List<int> bytes);
+
+/// Save a copy wherever the user chooses (Downloads, a cloud drive, …) through the system dialog.
+Future<bool> saveDeviceFile(String name, List<int> bytes) async =>
+    await FilePicker.saveFile(fileName: name, bytes: Uint8List.fromList(bytes)) != null;
+
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.pickFile = pickDeviceFile});
+  const SettingsScreen({super.key, this.pickFile = pickDeviceFile, this.saveFile = saveDeviceFile});
   final FilePickFn pickFile;
+  final SaveFileFn saveFile;
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -421,7 +431,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ]),
           ),
         ],
-        ..._backups.map((b) => ListTile(dense: true, leading: const Icon(Icons.archive_outlined), title: Text('${b['name']}'), trailing: Text(fmtBytes(b['size_bytes'] as num?)))),
+        if (app.has('backups'))
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(app.t('backup_copy_hint'), style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ..._backups.map((b) => ListTile(
+              dense: true,
+              leading: const Icon(Icons.archive_outlined),
+              title: Text('${b['name']}'),
+              subtitle: Text(fmtBytes(b['size_bytes'] as num?)),
+              trailing: IconButton(
+                key: Key('save_backup_${b['name']}'),
+                tooltip: app.t('backup_save_copy'),
+                icon: const Icon(Icons.save_alt),
+                onPressed: () async {
+                  final name = b['name'] as String;
+                  List<int>? bytes;
+                  if (!await runWithFeedback(context, () async => bytes = await app.engine.backupBytes(name))) return;
+                  final saved = await widget.saveFile(name, bytes!); // false = the user cancelled: nothing to say
+                  if (saved && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.t('saved'))));
+                  }
+                },
+              ),
+            )),
         _header('danger_section'),
         ListTile(
           leading: const Icon(Icons.settings_backup_restore),

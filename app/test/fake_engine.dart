@@ -486,6 +486,11 @@ class FakeEngine implements EngineApi {
   Future<List<Json>> listBackups() async => backups;
 
   @override
+  Future<List<int>> backupBytes(String name) async {
+    calls.add('backup_bytes:$name');
+    return [85, 65, 84, 65];
+  }
+  @override
   Future<Json> createBackup(String passphrase) async {
     calls.add('backup');
     final b = {'name': 'uata-backup-${backups.length}.uatabak', 'size_bytes': 1234};

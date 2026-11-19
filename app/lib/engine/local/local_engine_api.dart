@@ -10,6 +10,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../../core/engine_api.dart';
+import 'backup.dart';
 import 'chart_inputs.dart';
 import 'db.dart';
 import 'services.dart';
@@ -39,6 +40,77 @@ class LocalEngine {
   final notices = <Map<String, dynamic>>[];
 
   String get filesDir => '$root/files';
+  String get backupsDir => '$root/backups';
+
+  List<Map<String, dynamic>> listBackups() {
+    final d = Directory(backupsDir);
+    if (!d.existsSync()) return [];
+    final files = d.listSync().whereType<File>().where((f) => f.path.endsWith('.uatabak')).toList()
+      ..sort((a, b) => b.path.compareTo(a.path));
+    return [for (final f in files) {'name': f.uri.pathSegments.last, 'size_bytes': f.lengthSync()}];
+  }
+
+  File backupFile(String name) {
+    final base = name.split(RegExp(r'[\\/]')).last; // never a path outside the backups folder
+    final f = File('$backupsDir/$base');
+    if (!base.endsWith('.uatabak') || !f.existsSync()) throw EngineException(404, 'backup not found');
+    return f;
+  }
+
+  /// Encrypted backup of everything: database (signals, results, strategies, tests, settings, audit) + files.
+  Future<Map<String, dynamic>> createBackup(String passphrase) async {
+    if (passphrase.length < minPassphrase) throw EngineException(400, 'passphrase must be at least $minPassphrase characters');
+    Directory(backupsDir).createSync(recursive: true);
+    final stamp = utcnow().replaceAll(':', '').replaceAll('-', '').split('.').first;
+    final dest = '$backupsDir/uata-backup-$stamp.uatabak';
+    final tmp = Directory(root).createTempSync('backup_');
+    try {
+      final dbCopy = '${tmp.path}/uata.sqlite3';
+      db.copyTo(dbCopy);
+      final manifest = <String, dynamic>{
+        'format': 1, 'created_at': utcnow(), 'engine_version': '0.1.0', 'schema_version': db.schemaVersion(), 'created_on': 'phone',
+      };
+      final zip = '${tmp.path}/payload.zip';
+      final count = await writePayload(zip, dbCopy, filesDir, manifest);
+      await encryptFile(zip, '$dest.part', passphrase);
+      File('$dest.part').renameSync(dest);
+      db.session((d) => audit(d, 'user', 'backup.create', {'file': dest.split('/').last, 'files': count}));
+    } finally {
+      tmp.deleteSync(recursive: true);
+    }
+    final f = File(dest);
+    return {'name': f.uri.pathSegments.last, 'size_bytes': f.lengthSync()};
+  }
+
+  /// Replace all local data with a backup (from this phone or from the computer) after validating it fully.
+  Future<Map<String, dynamic>> restoreBackup(List<int> bytes, String name, String passphrase) async {
+    control.stop(reason: 'restore');
+    final tmp = Directory(root).createTempSync('restore_');
+    try {
+      final enc = File('${tmp.path}/in.uatabak')..writeAsBytesSync(bytes, flush: true);
+      final zip = '${tmp.path}/payload.zip';
+      await decryptFile(enc.path, zip, passphrase);
+      final x = '${tmp.path}/x';
+      final manifest = await extractPayload(zip, x);
+      if (!sqliteIntegrityOk('$x/uata.sqlite3')) throw BackupException('database in backup failed integrity check');
+      final version = await db.replaceWith('$x/uata.sqlite3', schema);
+      final files = Directory(filesDir);
+      if (files.existsSync()) files.deleteSync(recursive: true);
+      final restoredFiles = Directory('$x/files');
+      if (restoredFiles.existsSync()) {
+        restoredFiles.renameSync(filesDir);
+      } else {
+        files.createSync(recursive: true);
+      }
+      strategies.clearCache();
+      db.session((d) => audit(d, 'user', 'backup.restore', {'file': name, 'from_schema': manifest['schema_version']}));
+      return {'restored': true, 'manifest': manifest, 'schema_version': version};
+    } on BackupException catch (e) {
+      throw EngineException(400, e.message);
+    } finally {
+      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    }
+  }
 
   /// Open (or create) the on-device engine in `root`. A corrupt database is kept aside, never overwritten.
   static Future<LocalEngine> open(String root, SchemaLoader schema) async {
@@ -70,8 +142,10 @@ class LocalEngine {
     return e;
   }
 
-  Future<void> wipe() async {
+  Future<void> wipe({bool includeBackups = false}) async {
     control.stop(reason: 'wipe', emergency: true);
+    strategies.clearCache();
+    if (includeBackups && Directory(backupsDir).existsSync()) Directory(backupsDir).deleteSync(recursive: true);
     await db.recreate(schema);
     final files = Directory(filesDir);
     if (files.existsSync()) files.deleteSync(recursive: true);
@@ -120,7 +194,7 @@ class LocalEngineApi implements EngineApi {
   @override
   Future<Json> capabilities() async => {
         'engine': 'phone', 'ocr': false, 'ocr_languages': <String>[], 'speech_to_text': false, 'ffmpeg': false,
-        'screen_capture': false, 'knowledge': false, 'videos': false, 'backups': false, 'companion': false,
+        'screen_capture': false, 'knowledge': false, 'videos': false, 'backups': true, 'companion': false,
       };
 
   @override
@@ -276,11 +350,22 @@ class LocalEngineApi implements EngineApi {
 
   // ------------------------------------------------------------ backup & privacy
   @override
-  Future<List<Json>> listBackups() async => const [];
+  Future<List<Json>> listBackups() => _run(engine.listBackups);
   @override
-  Future<Json> createBackup(String passphrase) => _notOnPhone('encrypted backup');
+  Future<Json> createBackup(String passphrase) => _run(() => engine.createBackup(passphrase));
   @override
-  Future<Json> restoreBackup(UploadFile file, String passphrase) => _notOnPhone('encrypted backup');
+  Future<Json> restoreBackup(UploadFile file, String passphrase) =>
+      _run(() async => engine.restoreBackup(await _allBytes(file), file.name, passphrase));
   @override
-  Future<void> wipe({bool includeBackups = false}) => _run(engine.wipe);
+  Future<List<int>> backupBytes(String name) => _run(() => engine.backupFile(name).readAsBytesSync());
+  @override
+  Future<void> wipe({bool includeBackups = false}) => _run(() => engine.wipe(includeBackups: includeBackups));
+
+  static Future<Uint8List> _allBytes(UploadFile f) async {
+    final b = BytesBuilder(copy: false);
+    await for (final chunk in f.openRead()) {
+      b.add(chunk);
+    }
+    return b.takeBytes();
+  }
 }

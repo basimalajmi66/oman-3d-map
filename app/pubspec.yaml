@@ -51,6 +51,7 @@ dependencies:
   sqlite3: ^3.9.1
   path_provider: ^2.1.6
   archive: ^4.7.1
+  pointycastle: ^4.0.0
 
 dev_dependencies:
   flutter_test:

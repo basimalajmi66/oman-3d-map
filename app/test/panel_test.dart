@@ -228,6 +228,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(find.byKey(const Key('btn_wipe')), 300);
+    await tester.ensureVisible(find.byKey(const Key('btn_wipe'))); // the backup list is taller now (hint + copy button)
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('btn_wipe')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('wipe_text')), 'delete');

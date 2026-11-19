@@ -276,6 +276,20 @@ class HttpEngineApi implements EngineApi {
   Future<Json> restoreBackup(UploadFile file, String passphrase) async =>
       _map(await _multipart('/backups/restore', file, {'passphrase': passphrase}));
   @override
+  Future<List<int>> backupBytes(String name) async {
+    final h = await _headers();
+    try {
+      final r = await _client.get(_u('/backups/${Uri.encodeComponent(name)}'), headers: h).timeout(const Duration(minutes: 5));
+      if (r.statusCode != 200) throw EngineException(r.statusCode, 'backup not found');
+      return r.bodyBytes;
+    } on EngineException {
+      rethrow;
+    } catch (e) {
+      throw EngineException(0, 'engine unreachable: $e');
+    }
+  }
+
+  @override
   Future<void> wipe({bool includeBackups = false}) async =>
       _post('/privacy/wipe', {'confirm': 'DELETE ALL MY DATA', 'include_backups': includeBackups});
 }

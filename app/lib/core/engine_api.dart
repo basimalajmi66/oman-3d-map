@@ -120,6 +120,8 @@ abstract class EngineApi {
   // backup & privacy
   Future<List<Json>> listBackups();
   Future<Json> createBackup(String passphrase);
+  /// The encrypted backup file itself, to save a copy outside the app (another device, cloud drive…).
+  Future<List<int>> backupBytes(String name);
   Future<Json> restoreBackup(UploadFile file, String passphrase);
   Future<void> wipe({bool includeBackups = false});
 }
