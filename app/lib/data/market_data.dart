@@ -199,38 +199,61 @@ class MarketDataClient {
       if (h.weekday == DateTime.saturday) continue; // the market is closed: skip the empty files
       hours.add(h);
     }
-    final bars = <Bar>[];
+    final perHour = <int, List<Bar>>{}; // hours can arrive out of order (retries): merged in time order at the end
     const parallel = 3; // be gentle with the free data service
-    var failed = 0;
+    Uri url(DateTime h) => Uri.parse('https://datafeed.dukascopy.com/datafeed/${a.symbol}/'
+        '${h.year}/${(h.month - 1).toString().padLeft(2, '0')}/${h.day.toString().padLeft(2, '0')}/'
+        '${h.hour.toString().padLeft(2, '0')}h_ticks.bi5');
+    void add(DateTime h, http.Response f) {
+      if (f.statusCode != 200) return;
+      final base = h.millisecondsSinceEpoch;
+      // aggregate each hour right away (a phone must not hold millions of ticks)
+      perHour[base] = aggregateTicks([for (final (ms, bid, vol) in decodeBi5(f.bodyBytes, a.pointDivisor)) (base + ms, bid, vol)], tf);
+    }
+
+    final failedHours = <DateTime>[];
     for (var i = 0; i < hours.length; i += parallel) {
       if (_cancelled) throw MarketDataException('cancelled');
       final batch = hours.sublist(i, i + parallel > hours.length ? hours.length : i + parallel);
       final files = await Future.wait(batch.map((h) async {
         try {
-          return await _get(Uri.parse('https://datafeed.dukascopy.com/datafeed/${a.symbol}/'
-              '${h.year}/${(h.month - 1).toString().padLeft(2, '0')}/${h.day.toString().padLeft(2, '0')}/'
-              '${h.hour.toString().padLeft(2, '0')}h_ticks.bi5'));
+          return await _get(url(h));
         } on MarketDataException {
           if (_cancelled) rethrow;
-          return null; // one missing hour is tolerated (counted below)
+          return null; // retried once more at the end, after the service had a rest
         }
       }));
       for (var k = 0; k < batch.length; k++) {
         final f = files[k];
-        if (f == null) {
-          failed++;
-          continue;
-        }
-        if (f.statusCode != 200) continue;
-        final base = batch[k].millisecondsSinceEpoch;
-        // aggregate each hour right away (a phone must not hold millions of ticks)
-        final hourBars = aggregateTicks([for (final (ms, bid, vol) in decodeBi5(f.bodyBytes, a.pointDivisor)) (base + ms, bid, vol)], tf);
-        mergeBars(bars, hourBars);
+        f == null ? failedHours.add(batch[k]) : add(batch[k], f);
       }
-      if (failed > 3 && failed > hours.length * 0.05) {
-        throw MarketDataException('the data service is not answering (${u(a)}): $failed hours failed — try again later');
+      final done = i + batch.length;
+      if (done >= 12 && failedHours.length > done * 0.5) {
+        // most requests fail: the service is down, no point in waiting for all of them
+        throw MarketDataException('the data service is not answering (${u(a)}): ${failedHours.length} of $done hours failed — try again later');
       }
-      onProgress?.call((i + batch.length) / hours.length);
+      onProgress?.call(done / hours.length * (failedHours.isEmpty ? 1 : 0.95));
+    }
+    // a burst of "busy" answers is common: give the failed hours a second, slower chance, one at a time
+    var failed = 0;
+    for (final h in failedHours) {
+      if (_cancelled) throw MarketDataException('cancelled');
+      await Future<void>.delayed(_backoff(2));
+      try {
+        add(h, await _get(url(h)));
+      } on MarketDataException {
+        if (_cancelled) rethrow;
+        failed++;
+      }
+    }
+    onProgress?.call(1);
+    if (failed > 0 && failed > hours.length * 0.05) {
+      throw MarketDataException('the data service is not answering (${u(a)}): $failed hours failed — try again later');
+    }
+    // the rare hour still missing is a gap in time, like a weekend: candles are never invented across it
+    final bars = <Bar>[];
+    for (final h in perHour.keys.toList()..sort()) {
+      mergeBars(bars, perHour[h]!);
     }
     return bars; // only complete hours were fetched: every candle is closed
   }

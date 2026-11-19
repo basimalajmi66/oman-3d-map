@@ -97,6 +97,16 @@ void main() {
     final until = DateTime.utc(2026, 11, 6, 12); // a Friday: no Saturday skip inside the window
     final csv = await MarketDataClient(client: flaky, backoff: (_) => Duration.zero).download(marketAssets.first, 30, days: 4, until: until);
     expect(csv.split('\n').where((l) => l.isNotEmpty).length - 1, greaterThan(100));
+    // a burst of "busy" at the start (what the live service does) is retried later, not fatal
+    final tries = <String, int>{};
+    final burst = MockClient((req) async {
+      final t = tries[req.url.path] = (tries[req.url.path] ?? 0) + 1;
+      final early = tries.keys.toList().indexOf(req.url.path) < 6; // the first 6 hours asked for
+      return early && t <= 6 ? http.Response('busy', 503) : http.Response.bytes(hourBytes, 200); // 6 = all quick retries used up
+    });
+    final full = await MarketDataClient(client: burst, backoff: (_) => Duration.zero).download(marketAssets.first, 30, days: 4, until: until);
+    expect(full, csv); // nothing lost: every hour arrived on the second chance
+    expect(tries.values.where((t) => t == 7), hasLength(6));
     final dead = MockClient((req) async => http.Response('down', 503));
     await expectLater(MarketDataClient(client: dead, backoff: (_) => Duration.zero).download(marketAssets.first, 30, days: 4, until: until),
         throwsA(predicate((e) => e is MarketDataException && e.message.contains('not answering'))));
