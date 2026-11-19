@@ -61,7 +61,9 @@ _GLOSSARY = {
     "act_exit": ["exit", "close the trade", "take profit", "اخرج", "الخروج", "اغلق الصفقه"],
 }
 
-GLOSSARY: dict[str, list[str]] = {k: sorted({normalize(s) for s in v}, key=len, reverse=True)
+# longest first; ties alphabetically — a set alone has a random order per process (hash seed), which made
+# query expansion differ between runs
+GLOSSARY: dict[str, list[str]] = {k: sorted({normalize(s) for s in v}, key=lambda f: (-len(f), f))
                                   for k, v in _GLOSSARY.items()}
 
 # factor / pattern codes from the analysis engine -> concepts (to query the library)

@@ -13,6 +13,7 @@ import '../../core/engine_api.dart';
 import 'backup.dart';
 import 'chart_inputs.dart';
 import 'db.dart';
+import 'knowledge_service.dart';
 import 'services.dart';
 import 'settings.dart';
 
@@ -24,7 +25,8 @@ class LocalEngine {
     strategies = StrategyService(db, filesDir);
     signals = SignalService(records, strategies, settings);
     stats = StatsService(db);
-    charts = ChartInputService(db, filesDir, signals);
+    knowledge = KnowledgeService(db, filesDir);
+    charts = ChartInputService(db, filesDir, signals, knowledge: knowledge);
   }
 
   final String root;
@@ -37,6 +39,7 @@ class LocalEngine {
   late final SignalService signals;
   late final StatsService stats;
   late final ChartInputService charts;
+  late final KnowledgeService knowledge;
   final notices = <Map<String, dynamic>>[];
 
   String get filesDir => '$root/files';
@@ -103,6 +106,7 @@ class LocalEngine {
         files.createSync(recursive: true);
       }
       strategies.clearCache();
+      db.session((d) => knowledge.retriever.reindexMissing(d, utcnow())); // e.g. a backup from an older version
       db.session((d) => audit(d, 'user', 'backup.restore', {'file': name, 'from_schema': manifest['schema_version']}));
       return {'restored': true, 'manifest': manifest, 'schema_version': version};
     } on BackupException catch (e) {
@@ -194,7 +198,7 @@ class LocalEngineApi implements EngineApi {
   @override
   Future<Json> capabilities() async => {
         'engine': 'phone', 'ocr': false, 'ocr_languages': <String>[], 'speech_to_text': false, 'ffmpeg': false,
-        'screen_capture': false, 'knowledge': false, 'videos': false, 'backups': true, 'companion': false,
+        'screen_capture': false, 'knowledge': true, 'videos': false, 'backups': true, 'companion': false,
       };
 
   @override
@@ -258,29 +262,29 @@ class LocalEngineApi implements EngineApi {
   @override
   Future<List<int>> chartAnnotated(int inputId) => _run(() => engine.charts.annotatedPng(inputId));
 
-  // ------------------------------------------------------------ knowledge & videos (computer only for now)
+  // ------------------------------------------------------------ knowledge library (videos stay on the computer)
   @override
-  Future<List<Json>> listSources({String? kind, String? category}) => _notOnPhone('the knowledge library');
+  Future<List<Json>> listSources({String? kind, String? category}) => _run(() => engine.knowledge.listSources(kind: kind, category: category));
   @override
-  Future<Json> getSource(int id) => _notOnPhone('the knowledge library');
+  Future<Json> getSource(int id) => _run(() => engine.knowledge.getSource(id));
   @override
-  Future<void> deleteSource(int id) => _notOnPhone('the knowledge library');
+  Future<void> deleteSource(int id) => _run(() => engine.knowledge.deleteSource(id));
   @override
   Future<Json> addNote({required String title, required String content, String? category, List<String> tags = const [], String itemType = 'note'}) =>
-      _notOnPhone('the knowledge library');
+      _run(() => engine.knowledge.addNote(title, content, category: category, tags: tags, itemType: itemType));
   @override
-  Future<Json> addUrl({required String url, String? title, String? notes}) => _notOnPhone('the knowledge library');
+  Future<Json> addUrl({required String url, String? title, String? notes}) => _run(() => engine.knowledge.addUrl(url, title: title, notes: notes));
   @override
-  Future<Json> uploadFile(UploadFile file, {String? title, String? category, List<String> tags = const []}) =>
-      _notOnPhone('the knowledge library');
+  Future<Json> uploadFile(UploadFile file, {String? title, String? category, List<String> tags = const []}) => _run(() async =>
+      engine.knowledge.addFile(file.name, await _allBytes(file), title: title, category: category, tags: tags));
   @override
-  Future<Json> decideItem(int itemId, String decision) => _notOnPhone('the knowledge library');
+  Future<Json> decideItem(int itemId, String decision) => _run(() => engine.knowledge.decideItem(itemId, decision));
   @override
-  Future<List<Json>> search(String query, {bool approvedOnly = false}) => _notOnPhone('the knowledge library');
+  Future<List<Json>> search(String query, {bool approvedOnly = false}) => _run(() => engine.knowledge.search(query, approvedOnly: approvedOnly));
   @override
-  Future<List<Json>> listReports({String? status}) => _notOnPhone('the knowledge library');
+  Future<List<Json>> listReports({String? status}) => _run(() => engine.knowledge.listReports(status: status));
   @override
-  Future<Json> decideReport(int reportId, String decision) => _notOnPhone('the knowledge library');
+  Future<Json> decideReport(int reportId, String decision) => _run(() => engine.knowledge.decideReport(reportId, decision));
   @override
   Future<List<Json>> listVideos() => _notOnPhone('video learning');
   @override

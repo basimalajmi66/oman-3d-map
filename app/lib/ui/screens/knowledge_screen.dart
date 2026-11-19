@@ -170,6 +170,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
         IconButton(key: const Key('add_note'), tooltip: app.t('add_note'), icon: const Icon(Icons.note_add_outlined), onPressed: _addNote),
         IconButton(key: const Key('add_file'), tooltip: app.t('add_file'), icon: const Icon(Icons.upload_file), onPressed: _addFile),
         IconButton(key: const Key('add_url'), tooltip: app.t('add_url'), icon: const Icon(Icons.link), onPressed: _addUrl),
+        if (app.has('videos'))
         IconButton(
           key: const Key('open_videos'),
           tooltip: app.t('videos'),
@@ -280,7 +281,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
         if (s['url'] != null) SelectableText('URL: ${s['url']}'),
         Text('${app.t('extraction')}: ${app.t('extraction_${s['extraction_status']}')}'),
         if (s['notes'] != null) Text('${s['notes']}', style: const TextStyle(fontSize: 12, color: SignalColors.wait)),
-        if (s['kind'] == 'video')
+        if (s['kind'] == 'video' && app.has('videos'))
           TextButton.icon(
             key: const Key('open_video_page'),
             icon: const Icon(Icons.movie_outlined),

@@ -8,6 +8,43 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 import 'package:uata_app/core/engine_api.dart';
 
+/// Knowledge-library scenarios shared by both engines (the phone engine has the library too).
+void libraryScenarios(EngineApi Function() apiOf, {required Object skip}) {
+  late EngineApi api;
+  setUp(() => api = apiOf());
+  test('knowledge: note, upload, approve, search, delete', () async {
+    final note = await api.addNote(title: 'Engulfing', content: 'Bullish engulfing at support', itemType: 'rule');
+    final itemId = ((note['items'] as List).first as Map)['id'] as int;
+    expect(await api.search('engulfing', approvedOnly: true), isEmpty);
+    await api.decideItem(itemId, 'approve');
+    expect(await api.search('engulfing', approvedOnly: true), hasLength(1));
+
+    final bytes = 'RSI divergence rules\n\nWait for candle close.'.codeUnits;
+    final up = await api.uploadFile(UploadFile(name: 'rsi.txt', length: bytes.length, openRead: () => Stream.value(bytes)),
+        category: 'momentum', tags: ['rsi']);
+    expect(up['extraction_status'], 'done');
+    await expectLater(
+        api.uploadFile(UploadFile(name: 'again.txt', length: bytes.length, openRead: () => Stream.value(bytes))),
+        throwsA(predicate((e) => e is EngineException && e.statusCode == 409)));
+    await api.deleteSource(up['id'] as int);
+    expect((await api.listSources()).map((s) => s['id']), isNot(contains(up['id'])));
+  }, skip: skip);
+
+  test('phase 5: note with a rule → learning report → approve → bilingual search', () async {
+    final note = await api.addNote(title: 'قاعدة الارتداد', content: 'إذا كان مؤشر القوة النسبية في التشبع البيعي عند الدعم فادخل شراء.');
+    final report = note['report'] as Map;
+    expect(report['status'], 'pending_review');
+    expect(((report['extracted'] as Map)['rules'] as List), hasLength(1));
+    final pending = await api.listReports(status: 'pending_review');
+    expect(pending.map((r) => r['id']), contains(report['id']));
+    expect(await api.search('RSI oversold', approvedOnly: true), isEmpty); // not approved yet
+    final decided = await api.decideReport(report['id'] as int, 'approve');
+    expect(decided['status'], 'approved');
+    final hits = await api.search('RSI oversold', approvedOnly: true); // English query, Arabic note
+    expect(hits.first['source_title'], 'قاعدة الارتداد');
+  }, skip: skip);
+}
+
 void engineScenarios(EngineApi Function() apiOf,
     {required String? backend, required Directory Function() dataDir, required Object skip}) {
   late EngineApi api;
@@ -121,12 +158,17 @@ void engineScenarios(EngineApi Function() apiOf,
     ], workingDirectory: backend);
     expect(gen.exitCode, 0, reason: '${gen.stderr}');
     await api.patchSettings({'signal_cooldown_sec': 0});
+    final trendNote = await api.addNote(title: 'Trend rule', content: 'With an uptrend and aligned moving averages, buy pullbacks.');
+    await api.decideReport((trendNote['report'] as Map)['id'] as int, 'approve');
     final r = await api.submitChartImage(UploadFile(name: 'up.png', length: await chart.length(), openRead: chart.openRead));
     final a = r['analysis'] as Map;
     expect(a['signal'], 'BUY', reason: '${a['reason_code']} ${a['steps']}');
     expect((a['steps'] as List), hasLength(14));
     expect(a['confidence_calibrated'], false);
     expect((a['strategy'] as Map)['name'], 'Contract signal');
+    // approved library knowledge related to the chart is shown with the signal (both engines have the library)
+    expect(a['knowledge'], isNotEmpty);
+    expect((a['reasons'] as List).last, startsWith('related approved knowledge'));
     final before = (await api.listSignals()).length;
     final again = await api.submitChartImage(UploadFile(name: 'up.png', length: await chart.length(), openRead: chart.openRead));
     expect((again['analysis'] as Map)['repeated'], true);

@@ -237,10 +237,11 @@ class SignalService {
   final _clock = Stopwatch()..start();
   Duration? _lastTradeSignalAt; // null = no trade signal yet
 
-  Map<String, dynamic> evaluate(Map<String, dynamic> reading, Map<String, dynamic>? technical, String stream, {int? sessionId, String? asset}) {
+  Map<String, dynamic> evaluate(Map<String, dynamic> reading, Map<String, dynamic>? technical, String stream,
+      {int? sessionId, String? asset, List<Map>? knowledge}) {
     final s = settings.get();
     final approved = [for (final x in strategies.list()) if (x['status'] == 'approved') x];
-    final d = decide(reading, technical, s, approved);
+    final d = decide(reading, technical, s, approved, knowledge: knowledge);
     final fp = fingerprint(reading);
     final out = d.toJson();
     final repeated = fp.isNotEmpty && _lastFp[stream] == fp;

@@ -36,16 +36,16 @@ void main() {
   });
 
   // the same scenarios as the Python engine's contract test
+  libraryScenarios(() => api, skip: false);
   engineScenarios(() => api, backend: backendDir, dataDir: () => dir, skip: paritySkip);
 
   test('features not on the phone yet say so (501) instead of pretending', () async {
     final caps = await api.capabilities();
     expect(caps['engine'], 'phone');
-    for (final k in ['knowledge', 'videos', 'companion', 'screen_capture', 'ocr']) {
+    for (final k in ['videos', 'companion', 'screen_capture', 'ocr']) {
       expect(caps[k], false, reason: k);
     }
     for (final call in <Future<Object?> Function()>[
-      () => api.listSources(),
       () => api.listVideos(),
       () => api.captureScreen(),
       () => api.companionPairing(),
@@ -53,6 +53,7 @@ void main() {
       await expectLater(call(), throwsA(predicate((e) => e is EngineException && e.statusCode == 501)));
     }
     expect(caps['backups'], true);
+    expect(caps['knowledge'], true);
   });
 
   test('validation errors use the same codes as the computer engine', () async {

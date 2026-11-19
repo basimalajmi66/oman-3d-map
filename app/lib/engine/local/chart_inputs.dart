@@ -15,6 +15,7 @@ import '../analysis/analyzer.dart';
 import '../vision/imgops.dart';
 import '../vision/reader.dart';
 import 'db.dart';
+import 'knowledge_service.dart';
 import 'services.dart';
 
 const chartInputModes = ['upload', 'share', 'screenshot', 'screen_region'];
@@ -38,15 +39,26 @@ Future<Map<String, dynamic>> _process(Uint8List data, double minQuality, Map<Str
   final png = im.encodePng(im.Image.fromBytes(width: rgb.width, height: rgb.height, bytes: rgb.rgb.buffer, numChannels: 3));
   final reading = limitCandles(await ChartReader(minQuality: minQuality).read(rgb), maxCandles);
   reading['technical'] = analyzeReading(reading, enabled: enabled);
-  reading['knowledge'] = <Map<String, dynamic>>[]; // the knowledge library is not on the phone yet
   return {'reading': reading, 'png': png, 'width': rgb.width, 'height': rgb.height};
 }
 
 class ChartInputService {
-  ChartInputService(this.db, this.filesDir, this.signals);
+  ChartInputService(this.db, this.filesDir, this.signals, {this.knowledge});
   final LocalDb db;
   final String filesDir;
   final SignalService signals;
+  final KnowledgeService? knowledge; // approved library passages relevant to the chart (local RAG)
+
+  List<Map<String, dynamic>> _relatedKnowledge(Map? technical) {
+    final k = knowledge;
+    if (k == null || technical == null || technical['available'] != true) return [];
+    final q = knowledgeQuery(technical);
+    if (q.isEmpty) return [];
+    return [
+      for (final h in k.retrieve(q, approvedOnly: true, k: 5))
+        {for (final f in const ['item_id', 'title', 'snippet', 'location', 'source_id', 'source_title', 'item_type', 'score']) f: h[f]}
+    ];
+  }
 
   Future<Map<String, dynamic>> submit(Uint8List data, String? filename, String inputMode,
       {required bool screenAllowed, int? sessionId, required double minQuality, required Map<String, bool> enabled}) async {
@@ -69,7 +81,9 @@ class ChartInputService {
       final tmp = File('${dest.path}.part')..writeAsBytesSync(png, flush: true);
       tmp.renameSync(dest.path);
     }
-    reading['decision'] = signals.evaluate(reading, reading['technical'] as Map<String, dynamic>?, 'input:$inputMode', sessionId: sessionId);
+    reading['knowledge'] = _relatedKnowledge(reading['technical'] as Map?);
+    reading['decision'] = signals.evaluate(reading, reading['technical'] as Map<String, dynamic>?, 'input:$inputMode',
+        sessionId: sessionId, knowledge: (reading['knowledge'] as List).cast<Map>());
     final width = r['width'] as int, height = r['height'] as int;
     final row = db.session((d) {
       d.execute(

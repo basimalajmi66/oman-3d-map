@@ -45,23 +45,7 @@ void main() {
 
 
 
-  test('knowledge: note, upload, approve, search, delete', () async {
-    final note = await api.addNote(title: 'Engulfing', content: 'Bullish engulfing at support', itemType: 'rule');
-    final itemId = ((note['items'] as List).first as Map)['id'] as int;
-    expect(await api.search('engulfing', approvedOnly: true), isEmpty);
-    await api.decideItem(itemId, 'approve');
-    expect(await api.search('engulfing', approvedOnly: true), hasLength(1));
-
-    final bytes = 'RSI divergence rules\n\nWait for candle close.'.codeUnits;
-    final up = await api.uploadFile(UploadFile(name: 'rsi.txt', length: bytes.length, openRead: () => Stream.value(bytes)),
-        category: 'momentum', tags: ['rsi']);
-    expect(up['extraction_status'], 'done');
-    await expectLater(
-        api.uploadFile(UploadFile(name: 'again.txt', length: bytes.length, openRead: () => Stream.value(bytes))),
-        throwsA(predicate((e) => e is EngineException && e.statusCode == 409)));
-    await api.deleteSource(up['id'] as int);
-    expect((await api.listSources()).map((s) => s['id']), isNot(contains(up['id'])));
-  }, skip: skip);
+  libraryScenarios(() => api, skip: skip);
 
   test('results, backup and wipe', () async {
     await api.addResult({
@@ -84,19 +68,6 @@ void main() {
 
 
 
-  test('phase 5: note with a rule → learning report → approve → bilingual search', () async {
-    final note = await api.addNote(title: 'قاعدة الارتداد', content: 'إذا كان مؤشر القوة النسبية في التشبع البيعي عند الدعم فادخل شراء.');
-    final report = note['report'] as Map;
-    expect(report['status'], 'pending_review');
-    expect(((report['extracted'] as Map)['rules'] as List), hasLength(1));
-    final pending = await api.listReports(status: 'pending_review');
-    expect(pending.map((r) => r['id']), contains(report['id']));
-    expect(await api.search('RSI oversold', approvedOnly: true), isEmpty); // not approved yet
-    final decided = await api.decideReport(report['id'] as int, 'approve');
-    expect(decided['status'], 'approved');
-    final hits = await api.search('RSI oversold', approvedOnly: true); // English query, Arabic note
-    expect(hits.first['source_title'], 'قاعدة الارتداد');
-  }, skip: skip);
 
   test('phase 6: real video + subtitles → background analysis → timestamped rules, draft strategy', () async {
     final video = File(p.join(dataDir.path, 'lesson.mp4'));

@@ -97,6 +97,51 @@ def main() -> None:
                    "signals": con.execute("SELECT count(*) FROM signals").fetchone()[0],
                    "integrity": con.execute("PRAGMA integrity_check").fetchone()[0]}
             con.close()
+    elif op == "kn_text":
+        from uata.knowledge.rules import extract_rules
+        from uata.knowledge.textnorm import concepts, normalize
+        from uata.knowledge.retrieval import HashingEmbedder, expand_query
+        emb = HashingEmbedder()
+        out = [{"normalized": normalize(t), "concepts": sorted(concepts(t)), "expanded_concepts": sorted(concepts(expand_query(t))),
+                "rules": [r.to_dict() for r in extract_rules(t, "x")],
+                "features": {k: round(v, 6) for k, v in emb.features(t).items()},
+                "vector": [round(float(x), 6) for x in emb.embed(t)]} for t in req["texts"]]
+    elif op == "kn_files":
+        # build real DOCX/XLSX files with the same libraries users' files come from, extract with the engine
+        import docx, openpyxl
+        from uata.knowledge import extract as kx
+        d = docx.Document()
+        for para in req["docx_paragraphs"]:
+            d.add_paragraph(para)
+        t = d.add_table(rows=len(req["docx_table"]), cols=len(req["docx_table"][0]))
+        for i, row in enumerate(req["docx_table"]):
+            for j, v in enumerate(row):
+                t.cell(i, j).text = v
+        d.save(req["docx_path"])
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Rules"
+        for row in req["xlsx_rows"]:
+            ws.append(row)
+        ws2 = wb.create_sheet("Long")
+        for i in range(95):
+            ws2.append([f"row {i}", i, i * 1.5])
+        wb.save(req["xlsx_path"])
+        out = {k: [{"text": c.text, "location": c.location} for c in kx.extract(k, Path(req[f"{k}_path"]))]
+               for k in ("docx", "xlsx")}
+        out["txt"] = [{"text": c.text, "location": c.location} for c in kx.extract_txt(req["txt"].encode())]
+    elif op == "kn_search":
+        from uata.db.database import Database
+        from uata.services.knowledge_service import KnowledgeService
+        db = Database(Path(req["dir"]) / "k.sqlite3")
+        db.migrate()
+        ks = KnowledgeService(db, Path(req["dir"]) / "files")
+        for n in req["notes"]:
+            src = ks.add_note(n["title"], n["content"])
+            if n.get("approve"):
+                ks.decide_report(src["report"]["id"], "approve")
+        out = {q: [h["title"] for h in ks.retrieve(q, approved_only, 8)]
+               for q in req["queries"] for approved_only in [req.get("approved_only", True)]}
     elif op == "translate":
         out = [translate_rules(r, d) for r, d in req["cases"]]
     else:

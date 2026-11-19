@@ -15,7 +15,7 @@ import 'phase2_test.dart' show ListShareSource;
 /// What the phone engine declares (see LocalEngineApi.capabilities).
 const phoneCaps = {
   'engine': 'phone', 'ocr': false, 'ocr_languages': <String>[], 'speech_to_text': false, 'ffmpeg': false,
-  'screen_capture': false, 'knowledge': false, 'videos': false, 'backups': true, 'companion': false,
+  'screen_capture': false, 'knowledge': true, 'videos': false, 'backups': true, 'companion': false,
 };
 
 Future<AppState> phoneState(FakeEngine e, {Future<void> Function()? onSwitch}) async {
@@ -36,11 +36,17 @@ void main() {
     expect(chosen, 'remote');
   });
 
-  testWidgets('phone engine: the library button is hidden, the rest stays', (tester) async {
+  testWidgets('phone engine: the library is there (videos stay on the computer)', (tester) async {
     final state = await phoneState(FakeEngine());
     await tester.pumpWidget(AppScope(state: state, child: const MaterialApp(home: FloatingPanel())));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('nav_library')), findsNothing);
+    expect(find.byKey(const Key('nav_library')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('nav_library')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('add_file')), findsOneWidget);
+    expect(find.byKey(const Key('open_videos')), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('nav_training')), findsOneWidget);
     expect(find.byKey(const Key('nav_log')), findsOneWidget);
     expect(find.byKey(const Key('nav_settings')), findsOneWidget);
@@ -72,7 +78,7 @@ void main() {
     expect(switched, true);
   });
 
-  test('phone engine: shared documents are reported unsupported, chart images are analysed', () async {
+  test('an engine without a library reports shared documents as unsupported', () async {
     final dir = Directory.systemTemp.createTempSync('uata_share');
     final pdf = File('${dir.path}/book.pdf')..writeAsBytesSync([1, 2, 3]);
     final e = FakeEngine();
