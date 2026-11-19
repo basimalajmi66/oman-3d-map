@@ -61,11 +61,45 @@ def _merge(locs: list[str]) -> str:
     return f"{uniq[0]}…{uniq[-1]}"
 
 
+SUBTITLE_GROUP_MS = 60_000  # a video's words are kept in ~1 minute pieces, each with its timestamp
+_CUE_LINE = re.compile(r"^\s*(?:\d+:)?\d{1,2}:\d{2}[.,]\d{1,3}\s*-->", re.M)
+
+
+def _fmt_ts(ms: int) -> str:
+    s = ms // 1000
+    return f"{s // 3600:d}:{s // 60 % 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60:02d}:{s % 60:02d}"
+
+
+def subtitle_chunks(text: str, size: int = CHUNK_CHARS) -> list[Chunk] | None:
+    """SRT / WebVTT (a video's subtitles) → chunks located by video time ("01:23"); None if not subtitles."""
+    if not _CUE_LINE.search(text):
+        return None
+    from uata.video.transcript import parse_subtitles
+    try:
+        cues = parse_subtitles(text)
+    except ValueError:
+        return None
+    out: list[Chunk] = []
+    group: list = []
+    for c in cues + [None]:
+        if c is None or (group and (c.start_ms - group[0].start_ms >= SUBTITLE_GROUP_MS
+                                    or sum(len(g.text) + 1 for g in group) + len(c.text) > size)):
+            if group:
+                out.append(Chunk(" ".join(g.text for g in group), _fmt_ts(group[0].start_ms)))
+            group = []
+        if c is not None:
+            group.append(c)
+    return out
+
+
 def extract_txt(data: bytes) -> list[Chunk]:
     try:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError as e:
         raise ExtractionError("text file is not UTF-8") from e
+    subs = subtitle_chunks(text.replace("\r\n", "\n"))
+    if subs is not None:
+        return subs
     paras = [p for p in re.split(r"\n\s*\n", text)]
     return _pack([(p, f"¶{i + 1}") for i, p in enumerate(paras)])
 

@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
 
+import '../util.dart';
 import 'pdf_text.dart';
 
 const chunkChars = 1200;
@@ -81,8 +82,71 @@ List<Chunk> extractTxt(Uint8List data) {
     throw ExtractionError('text file is not UTF-8');
   }
   if (text.startsWith('﻿')) text = text.substring(1);
+  final subs = subtitleChunks(text.replaceAll('\r\n', '\n'));
+  if (subs != null) return subs;
   final paras = text.split(RegExp(r'\n\s*\n'));
   return pack([for (var i = 0; i < paras.length; i++) (paras[i], '¶${i + 1}')]);
+}
+
+const subtitleGroupMs = 60000; // a video's words are kept in ~1 minute pieces, each with its timestamp
+final _cueLine = RegExp(r'^\s*(?:\d+:)?\d{1,2}:\d{2}[.,]\d{1,3}\s*-->', multiLine: true);
+final _ts = RegExp(r'(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})');
+
+String fmtTs(int ms) {
+  final s = ms ~/ 1000;
+  String two(int v) => v.toString().padLeft(2, '0');
+  return s >= 3600 ? '${s ~/ 3600}:${two(s ~/ 60 % 60)}:${two(s % 60)}' : '${two(s ~/ 60)}:${two(s % 60)}';
+}
+
+/// One subtitle cue (port of video/transcript.py parse_subtitles).
+typedef Cue = ({int startMs, int endMs, String text});
+
+int _cueMs(String ts) {
+  final m = _ts.firstMatch(ts);
+  if (m == null) throw FormatException('bad timestamp: $ts');
+  final h = int.parse(m[1] ?? '0');
+  return ((h * 60 + int.parse(m[2]!)) * 60 + int.parse(m[3]!)) * 1000 + int.parse(m[4]!.padRight(3, '0'));
+}
+
+/// SRT or WebVTT; tags (<i>, {\an8}) stripped, empty cues dropped. Throws FormatException when there are no cues.
+List<Cue> parseSubtitles(String text) {
+  text = text.replaceAll('\r\n', '\n').replaceAll('\ufeff', '');
+  final out = <Cue>[];
+  for (final block in text.split(RegExp(r'\n\s*\n'))) {
+    final lines = [for (final l in block.trim().split('\n')) if (l.trim().isNotEmpty) l];
+    final idx = lines.indexWhere((l) => l.contains('-->'));
+    if (idx < 0) continue;
+    final parts = lines[idx].split('-->');
+    final start = parts[0].trim(), end = parts[1].trim();
+    final body = lines.sublist(idx + 1).join(' ').replaceAll(RegExp(r'<[^>]+>|\{[^}]+\}'), '').trim();
+    if (body.isNotEmpty) out.add((startMs: _cueMs(start), endMs: _cueMs(end.split(' ').first), text: body));
+  }
+  if (out.isEmpty) throw const FormatException('no subtitle cues found (expected SRT or WebVTT)');
+  return stableSorted(out, (a, b) => a.startMs.compareTo(b.startMs));
+}
+
+/// A video's subtitles → chunks located by video time ("01:23"); null if the text is not subtitles.
+List<Chunk>? subtitleChunks(String text, {int size = chunkChars}) {
+  if (!_cueLine.hasMatch(text)) return null;
+  final List<Cue> cues;
+  try {
+    cues = parseSubtitles(text);
+  } on FormatException {
+    return null;
+  }
+  final out = <Chunk>[];
+  var group = <Cue>[];
+  for (final c in [...cues, null]) {
+    if (c == null ||
+        (group.isNotEmpty &&
+            (c.startMs - group.first.startMs >= subtitleGroupMs ||
+                group.fold<int>(0, (n, g) => n + g.text.length + 1) + c.text.length > size))) {
+      if (group.isNotEmpty) out.add(Chunk(group.map((g) => g.text).join(' '), fmtTs(group.first.startMs)));
+      group = [];
+    }
+    if (c != null) group.add(c);
+  }
+  return out;
 }
 
 Archive _zip(Uint8List data, String what) {

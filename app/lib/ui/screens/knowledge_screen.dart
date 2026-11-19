@@ -14,7 +14,7 @@ Future<UploadFile?> pickDeviceFile() async {
   final f = await FilePicker.pickFile(
     type: FileType.custom,
     allowedExtensions: const [
-      'pdf', 'docx', 'xlsx', 'xlsm', 'txt', 'md', 'csv', //
+      'pdf', 'docx', 'xlsx', 'xlsm', 'txt', 'md', 'csv', 'srt', 'vtt', //
       'png', 'jpg', 'jpeg', 'webp', 'bmp', 'mp4', 'mkv', 'mov', 'avi', 'webm',
     ],
   );

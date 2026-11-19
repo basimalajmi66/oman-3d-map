@@ -22,7 +22,7 @@ import 'services.dart' show badRequest;
 
 const maxUploadBytes = 200 * 1024 * 1024; // the phone keeps documents; videos stay on the computer
 const extKind = {
-  '.pdf': 'pdf', '.docx': 'docx', '.xlsx': 'xlsx', '.xlsm': 'xlsx', '.txt': 'txt', '.md': 'txt', '.csv': 'txt', //
+  '.pdf': 'pdf', '.docx': 'docx', '.xlsx': 'xlsx', '.xlsm': 'xlsx', '.txt': 'txt', '.md': 'txt', '.csv': 'txt', '.srt': 'txt', '.vtt': 'txt', //
   '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.webp': 'image', '.bmp': 'image',
   '.mp4': 'video', '.mkv': 'video', '.mov': 'video', '.avi': 'video', '.webm': 'video',
 };

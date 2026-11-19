@@ -35,7 +35,7 @@ CHUNK_CHARS = 1500
 
 EXT_KIND = {
     ".pdf": "pdf", ".docx": "docx", ".xlsx": "xlsx", ".xlsm": "xlsx",
-    ".txt": "txt", ".md": "txt", ".csv": "txt",
+    ".txt": "txt", ".md": "txt", ".csv": "txt", ".srt": "txt", ".vtt": "txt",  # subtitles: timestamped text
     ".png": "image", ".jpg": "image", ".jpeg": "image", ".webp": "image", ".bmp": "image",
     ".mp4": "video", ".mkv": "video", ".mov": "video", ".avi": "video", ".webm": "video",
 }

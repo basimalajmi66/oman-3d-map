@@ -106,6 +106,9 @@ def main() -> None:
                 "rules": [r.to_dict() for r in extract_rules(t, "x")],
                 "features": {k: round(v, 6) for k, v in emb.features(t).items()},
                 "vector": [round(float(x), 6) for x in emb.embed(t)]} for t in req["texts"]]
+    elif op == "kn_txt":
+        from uata.knowledge import extract as kx
+        out = [[[c.text, c.location] for c in kx.extract_txt(t.encode("utf-8"))] for t in req["texts"]]
     elif op == "kn_files":
         # build real DOCX/XLSX files with the same libraries users' files come from, extract with the engine
         import docx, openpyxl
