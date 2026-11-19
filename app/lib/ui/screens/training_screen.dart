@@ -5,6 +5,7 @@ import '../../core/engine_api.dart';
 import '../../l10n/strings.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
+import 'paper_trading_screen.dart';
 import 'quick_start_screen.dart';
 import 'knowledge_screen.dart' show FilePickFn;
 
@@ -32,6 +33,13 @@ class TrainingScreen extends StatelessWidget {
         appBar: AppBar(
           title: Text(app.t('training_title')),
           actions: [
+            if (app.paper != null)
+              IconButton(
+                key: const Key('open_paper'),
+                tooltip: app.t('paper_title'),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PaperTradingScreen())),
+                icon: const Icon(Icons.smart_toy_outlined),
+              ),
             TextButton.icon(
               key: const Key('open_quick_start'),
               onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const QuickStartScreen())),

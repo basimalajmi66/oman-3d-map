@@ -8,7 +8,9 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:uata_app/data/market_data.dart';
+import 'package:uata_app/data/paper_trading.dart';
 import 'package:uata_app/data/quick_start.dart';
+import 'package:uata_app/data/starter_strategies.dart';
 import 'package:uata_app/engine/local/local_engine_api.dart';
 
 Future<String> schema(int v) => File('assets/schema/schema_v$v.sql').readAsString();
@@ -51,4 +53,35 @@ void main() {
     }
     client.close();
   }, timeout: const Timeout(Duration(minutes: 15)));
+
+  test('live: a paper session started 2 days ago catches up on real EURUSD prices in two steps', () async {
+    final ids = <int>[];
+    for (final st in starterStrategies.take(6)) {
+      ids.add((await api.createStrategy(st.name, st.definition))['id'] as int);
+    }
+    // a weekday window well in the past, so every hour file exists
+    var now = DateTime.now().toUtc().subtract(const Duration(days: 3));
+    while (now.weekday == DateTime.saturday || now.weekday == DateTime.sunday || now.weekday == DateTime.monday) {
+      now = now.subtract(const Duration(days: 1));
+    }
+    final startAt = now.subtract(const Duration(hours: 12));
+    var clock = startAt;
+    final p = PaperTrader('${dir.path}/paper', now: () => clock);
+    final s = await p.start(api, marketAssets.first, 30, 0.85, ids);
+    expect(s.lastError, isNull);
+    clock = startAt.add(const Duration(hours: 6));
+    await p.update(api, p.sessions().single);
+    clock = now;
+    final done = await p.update(api, p.sessions().single);
+    expect(done.lastError, isNull);
+    // ignore: avoid_print
+    print('paper EURUSD 12h: ${done.trades.length} trades');
+    for (final r in done.summary()) {
+      // ignore: avoid_print
+      print('  ${r['name']}: ${r['trades']} trades, win ${r['win_rate']}, net ${r['net']}');
+    }
+    expect(done.trades, isNotEmpty);
+    final dash = await api.dashboard('simulation');
+    expect((dash['results'] as Map)['trades'], done.trades.length);
+  }, timeout: const Timeout(Duration(minutes: 10)));
 }

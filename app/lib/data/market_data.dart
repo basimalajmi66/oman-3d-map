@@ -176,11 +176,19 @@ class MarketDataClient {
     _cancelled = false;
     final end = (until ?? DateTime.now().toUtc()).toUtc();
     final start = end.subtract(Duration(days: days));
-    final bars = asset.source == 'dukascopy'
-        ? await _dukascopy(asset, timeframeSec, start, end, onProgress)
-        : await _binance(asset, timeframeSec, start, end, onProgress);
+    final bars = await fetchBars(asset, timeframeSec, start, end, onProgress: onProgress);
     if (bars.length < 100) throw MarketDataException('too little data returned (${bars.length} candles) — try a longer period');
     return barsToCsv(bars, volume: true);
+  }
+
+  /// Closed candles of `timeframeSec` between `from` and `to` (a candle still forming at `to` is never included).
+  Future<List<Bar>> fetchBars(MarketAsset asset, int timeframeSec, DateTime from, DateTime to, {Progress? onProgress}) async {
+    _cancelled = false;
+    final bars = asset.source == 'dukascopy'
+        ? await _dukascopy(asset, timeframeSec, from.toUtc(), to.toUtc(), onProgress)
+        : await _binance(asset, timeframeSec, from.toUtc(), to.toUtc(), onProgress);
+    final endSec = to.millisecondsSinceEpoch ~/ 1000;
+    return [for (final b in bars) if (b.time + timeframeSec <= endSec) b];
   }
 
   Future<List<Bar>> _dukascopy(MarketAsset a, int tf, DateTime start, DateTime end, Progress? onProgress) async {
@@ -224,8 +232,7 @@ class MarketDataClient {
       }
       onProgress?.call((i + batch.length) / hours.length);
     }
-    // the last candle may still be forming at download time
-    return bars.isEmpty ? bars : bars.sublist(0, bars.length - 1);
+    return bars; // only complete hours were fetched: every candle is closed
   }
 
   static const _binanceIntervals = {60: '1m', 180: '3m', 300: '5m', 900: '15m', 1800: '30m', 3600: '1h', 14400: '4h', 86400: '1d'};
@@ -251,7 +258,7 @@ class MarketDataClient {
       from = ((rows.last as List)[0] as int) + stepSec * 1000;
       onProgress?.call(((from - start.millisecondsSinceEpoch) / (to - start.millisecondsSinceEpoch)).clamp(0, 1).toDouble());
     }
-    return bars.isEmpty ? bars : bars.sublist(0, bars.length - 1);
+    return bars; // fetchBars drops a candle still forming at the end time
   }
 
   static String u(MarketAsset a) => a.source == 'dukascopy' ? 'Dukascopy' : 'Binance';

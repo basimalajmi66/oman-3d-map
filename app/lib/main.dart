@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'core/companion.dart';
 import 'core/engine_mode.dart';
@@ -10,6 +11,7 @@ import 'core/engine_api.dart';
 import 'core/engine_host.dart';
 import 'core/http_engine_api.dart';
 import 'core/window_controller.dart';
+import 'data/paper_trading.dart';
 import 'engine/local/local_host.dart';
 import 'platform/android_overlay.dart';
 import 'platform/share_intake.dart';
@@ -99,9 +101,14 @@ Future<void> startApp() async {
       await startApp();
     },
     onSwitchMode: mode == null ? null : () => restartAs(mode == 'local' ? 'remote' : 'local'),
+    paper: PaperTrader('${(await getApplicationSupportDirectory()).path}/paper'),
   );
   await state.init();
   runApp(UataApp(state: state));
+  // paper trading catches up now and every two minutes while the app is open (it never executes real trades)
+  unawaited(state.paperTick());
+  _paperTimer?.cancel();
+  _paperTimer = Timer.periodic(const Duration(minutes: 2), (_) => state.paperTick());
 
   if (EngineHost.isCompanionPlatform) {
     final library = state.has('knowledge');
@@ -124,6 +131,7 @@ Future<void> startApp() async {
 }
 
 ShareIntake? _share;
+Timer? _paperTimer;
 
 /// Entry point of the Android floating window (separate Flutter engine).
 @pragma('vm:entry-point')

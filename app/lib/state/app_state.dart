@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/companion.dart';
 import '../core/engine_api.dart';
 import '../core/image_prep.dart';
+import '../data/paper_trading.dart';
 import '../core/window_controller.dart';
 import '../l10n/strings.dart';
 import '../platform/android_overlay.dart';
@@ -20,6 +21,7 @@ class AppState extends ChangeNotifier {
     this.companion,
     this.onUnpair,
     this.onSwitchMode,
+    this.paper,
   }) : overlay = overlay ?? NoOverlay();
 
   /// Set on a phone / tablet: the engine is on this paired computer.
@@ -35,6 +37,17 @@ class AppState extends ChangeNotifier {
   /// Longest side chart images are shrunk to before analysis (0 = original); engines without the setting: 1280.
   int get chartMaxSide => settings['chart_max_side'] as int? ?? 1280;
   final Future<void> Function()? onSwitchMode;
+
+  /// Automatic paper trading (virtual trades on real prices, simulation results only). Null in tests.
+  final PaperTrader? paper;
+
+  /// Catch up running paper sessions — not while the emergency stop is active, and only with the user's consent to
+  /// download public prices.
+  Future<void> paperTick() async {
+    final p = paper;
+    if (p == null || status['halted'] == true || settings['external_data_sources_allowed'] != true) return;
+    await p.updateAll(engine);
+  }
 
   final EngineApi engine;
   final WindowController window;
