@@ -7,9 +7,11 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import '../../core/engine_api.dart';
+import '../knowledge/extract.dart' as kx;
 import 'backup.dart';
 import 'chart_inputs.dart';
 import 'db.dart';
@@ -275,8 +277,15 @@ class LocalEngineApi implements EngineApi {
   @override
   Future<Json> addUrl({required String url, String? title, String? notes}) => _run(() => engine.knowledge.addUrl(url, title: title, notes: notes));
   @override
-  Future<Json> uploadFile(UploadFile file, {String? title, String? category, List<String> tags = const []}) => _run(() async =>
-      engine.knowledge.addFile(file.name, await _allBytes(file), title: title, category: category, tags: tags));
+  Future<Json> uploadFile(UploadFile file, {String? title, String? category, List<String> tags = const []}) => _run(() async {
+        final bytes = await _allBytes(file);
+        (List<kx.Chunk>, String?)? pre;
+        if (file.name.toLowerCase().endsWith('.pdf') && bytes.length <= maxUploadBytes) {
+          // a book can take seconds to read: never on the UI thread
+          pre = await _extractPdfInBackground(bytes);
+        }
+        return engine.knowledge.addFile(file.name, bytes, title: title, category: category, tags: tags, preExtracted: pre);
+      });
   @override
   Future<Json> decideItem(int itemId, String decision) => _run(() => engine.knowledge.decideItem(itemId, decision));
   @override
@@ -373,3 +382,12 @@ class LocalEngineApi implements EngineApi {
     return b.takeBytes();
   }
 }
+
+/// Top level so the isolate closure captures nothing but the bytes (an instance closure would drag the open database along).
+Future<(List<kx.Chunk>, String?)> _extractPdfInBackground(Uint8List bytes) => Isolate.run(() {
+      try {
+        return (kx.extractPdf(bytes), null);
+      } on kx.ExtractionError catch (e) {
+        return (<kx.Chunk>[], e.message);
+      }
+    });

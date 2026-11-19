@@ -8,6 +8,8 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
 
+import 'pdf_text.dart';
+
 const chunkChars = 1200;
 
 class Chunk {
@@ -225,12 +227,28 @@ List<Chunk> extractXlsx(Uint8List data) {
   return out;
 }
 
-/// Extractors available on the phone. PDF, image OCR and video stay on the computer for now.
-const phoneExtractable = {'txt', 'docx', 'xlsx'};
+List<Chunk> extractPdf(Uint8List data) {
+  final List<String> pages;
+  try {
+    pages = pdfPageTexts(data);
+  } on PdfError catch (e) {
+    throw ExtractionError(e.message == 'PDF is password protected' ? e.message : 'PDF could not be read: ${e.message}');
+  } catch (e) {
+    throw ExtractionError('PDF could not be read: $e');
+  }
+  if (!pages.any((t) => t.trim().isNotEmpty)) {
+    throw ExtractionError('PDF has no extractable text (scanned images; OCR of PDFs is not supported yet)');
+  }
+  return pack([for (var i = 0; i < pages.length; i++) (pages[i], 'p.${i + 1}')]);
+}
+
+/// Extractors available on the phone. Image OCR and video stay on the computer.
+const phoneExtractable = {'txt', 'docx', 'xlsx', 'pdf'};
 
 List<Chunk> extract(String kind, Uint8List data) => switch (kind) {
       'txt' => extractTxt(data),
       'docx' => extractDocx(data),
       'xlsx' => extractXlsx(data),
+      'pdf' => extractPdf(data),
       _ => throw ExtractionError("extraction for '$kind' is not available on the phone yet"),
     };

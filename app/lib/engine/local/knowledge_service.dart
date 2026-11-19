@@ -152,7 +152,9 @@ class KnowledgeService {
     return getSource(sid);
   }
 
-  Map<String, dynamic> addFile(String filename, Uint8List data, {String? title, String? category, List<String> tags = const []}) {
+  /// `preExtracted`: chunks (or the extraction error) computed in a background isolate for big files (PDF).
+  Map<String, dynamic> addFile(String filename, Uint8List data,
+      {String? title, String? category, List<String> tags = const [], (List<kx.Chunk>, String?)? preExtracted}) {
     final safeName = filename.split(RegExp(r'[\\/]')).last.isEmpty ? 'upload.bin' : filename.split(RegExp(r'[\\/]')).last;
     final dot = safeName.lastIndexOf('.');
     final ext = dot >= 0 ? safeName.substring(dot).toLowerCase() : '';
@@ -171,7 +173,11 @@ class KnowledgeService {
     var chunks = <kx.Chunk>[];
     var status = 'unsupported_yet';
     String? error;
-    if (kx.phoneExtractable.contains(kind)) {
+    if (preExtracted != null) {
+      chunks = preExtracted.$1;
+      error = preExtracted.$2;
+      status = error == null ? 'done' : 'failed';
+    } else if (kx.phoneExtractable.contains(kind)) {
       try {
         chunks = kx.extract(kind, data);
         status = 'done';

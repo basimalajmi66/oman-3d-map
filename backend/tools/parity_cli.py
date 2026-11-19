@@ -142,6 +142,20 @@ def main() -> None:
                 ks.decide_report(src["report"]["id"], "approve")
         out = {q: [h["title"] for h in ks.retrieve(q, approved_only, 8)]
                for q in req["queries"] for approved_only in [req.get("approved_only", True)]}
+    elif op == "kn_pdf":
+        from uata.knowledge import extract as kx
+        from uata.knowledge.rules import extract_rules
+        from uata.knowledge.textnorm import concepts
+        out = {}
+        for path in req["paths"]:
+            try:
+                chunks = kx.extract("pdf", Path(path))
+                out[path] = {"locations": [c.location for c in chunks],
+                             "concepts": sorted({x for c in chunks for x in concepts(c.text)}),
+                             "rules": sorted({(" ".join(r.actions) + "|" + " ".join(r.conditions))
+                                              for c in chunks for r in extract_rules(c.text, c.location)})}
+            except kx.ExtractionError as e:
+                out[path] = {"error": str(e)}
     elif op == "translate":
         out = [translate_rules(r, d) for r, d in req["cases"]]
     else:
