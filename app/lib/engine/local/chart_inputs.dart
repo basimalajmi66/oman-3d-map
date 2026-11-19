@@ -28,7 +28,7 @@ RgbImage rgbOf(im.Image d) {
 }
 
 /// Runs in a background isolate: decode → PNG → read → technical analysis.
-Future<Map<String, dynamic>> _process(Uint8List data, double minQuality, Map<String, bool> enabled) async {
+Future<Map<String, dynamic>> _process(Uint8List data, double minQuality, Map<String, bool> enabled, int maxCandles) async {
   final decoded = im.decodeImage(data);
   if (decoded == null) return {'error': 'file is not a readable image'};
   if (decoded.width < minSide || decoded.height < minSide) {
@@ -36,7 +36,7 @@ Future<Map<String, dynamic>> _process(Uint8List data, double minQuality, Map<Str
   }
   final rgb = rgbOf(decoded);
   final png = im.encodePng(im.Image.fromBytes(width: rgb.width, height: rgb.height, bytes: rgb.rgb.buffer, numChannels: 3));
-  final reading = await ChartReader(minQuality: minQuality).read(rgb);
+  final reading = limitCandles(await ChartReader(minQuality: minQuality).read(rgb), maxCandles);
   reading['technical'] = analyzeReading(reading, enabled: enabled);
   reading['knowledge'] = <Map<String, dynamic>>[]; // the knowledge library is not on the phone yet
   return {'reading': reading, 'png': png, 'width': rgb.width, 'height': rgb.height};
@@ -56,7 +56,8 @@ class ChartInputService {
     }
     if (data.isEmpty) throw EngineException(422, 'empty file');
     if (data.length > maxImageBytes) throw EngineException(422, 'image too large (max 25 MB)');
-    final r = await Isolate.run(() => _process(data, minQuality, enabled));
+    final maxCandles = signals.settings.get()['chart_max_candles'] as int;
+    final r = await Isolate.run(() => _process(data, minQuality, enabled, maxCandles));
     if (r['error'] != null) throw EngineException(422, r['error'] as String);
     final png = r['png'] as Uint8List;
     final reading = r['reading'] as Map<String, dynamic>;

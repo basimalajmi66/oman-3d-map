@@ -65,7 +65,11 @@ def main() -> None:
             if case.get("degrade"):
                 img = degrade(img, **case["degrade"])
             cv2.imwrite(case["path"], img)
-            out.append(ChartReader(use_ocr=False).read(cv2.imread(case["path"])).to_dict())
+            reading = ChartReader(use_ocr=False).read(cv2.imread(case["path"])).to_dict()
+            if case.get("limit"):
+                from uata.vision.reader import limit_candles
+                reading = limit_candles(reading, case["limit"])
+            out.append(reading)
     elif op == "backup_make":
         # a computer-side backup with known content, for the phone to restore
         from uata.api.app import build_services

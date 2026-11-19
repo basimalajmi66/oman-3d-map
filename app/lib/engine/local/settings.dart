@@ -10,6 +10,8 @@ const indicatorNames = [
   'moving_averages', 'rsi', 'macd', 'bollinger_bands', 'atr', 'volume', 'momentum', 'volatility', 'chart_patterns',
 ];
 const allowedTimeframes = [5, 10, 15, 30, 60, 120, 180, 300, 900, 1800, 3600, 14400, 86400];
+const allowedChartMaxSide = [0, 800, 1024, 1280, 1600, 1920]; // 0 = original size
+const allowedChartMaxCandles = [0, 60, 80, 100, 150, 200]; // 0 = all; strategies need 50+ closed candles
 
 /// A setting that does not validate (the API reports it as 422, like pydantic).
 class SettingsError implements Exception {
@@ -37,6 +39,8 @@ Map<String, dynamic> defaultSettings() => {
       'screen_capture_allowed': false,
       'capture_region': null,
       'capture_interval_sec': 5,
+      'chart_max_side': 1280,
+      'chart_max_candles': 100,
       'external_data_sources_allowed': false,
       'stt_model_path': null,
       'companion_enabled': false,
@@ -108,6 +112,12 @@ Map<String, dynamic> validateSettings(Map input) {
     }
   }
   _int(s, 'capture_interval_sec', 2, 60);
+  if (!allowedChartMaxSide.contains(_int(s, 'chart_max_side', 0, 10000))) {
+    throw SettingsError('chart_max_side must be one of $allowedChartMaxSide');
+  }
+  if (!allowedChartMaxCandles.contains(_int(s, 'chart_max_candles', 0, 10000))) {
+    throw SettingsError('chart_max_candles must be one of $allowedChartMaxCandles');
+  }
   _bool(s, 'external_data_sources_allowed');
   if (s['stt_model_path'] != null && s['stt_model_path'] is! String) throw SettingsError('stt_model_path must be text');
   _bool(s, 'companion_enabled');

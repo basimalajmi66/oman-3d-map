@@ -108,4 +108,22 @@ void main() {
     await tester.pump();
     expect(find.textContaining(tr('ar', 'error')), findsNothing);
   });
+
+  testWidgets('chart image size and number of candles are adjustable in settings', (tester) async {
+    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final e = FakeEngine();
+    final state = await phoneState(e);
+    await tester.pumpWidget(AppScope(state: state, child: const MaterialApp(home: SettingsScreen())));
+    await tester.pumpAndSettle();
+    expect(find.text('1280 px'), findsOneWidget);
+    expect(find.text(tr('ar', 'chart_max_candles')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('dd_chart_max_candles')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('60').last);
+    await tester.pumpAndSettle();
+    expect(e.settings['chart_max_candles'], 60);
+    expect(state.chartMaxSide, 1280);
+  });
 }

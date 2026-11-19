@@ -23,7 +23,7 @@ import numpy as np
 
 from uata.db.database import Database, audit, row_to_dict, utcnow
 from uata.analysis.engine import analyze_reading
-from uata.vision.reader import ChartReader, annotate
+from uata.vision.reader import ChartReader, annotate, limit_candles
 
 INPUT_MODES = ("upload", "share", "screenshot", "screen_region")
 # Automatic capture modes read the screen; they need the user's permission.
@@ -82,11 +82,17 @@ class ChartInputService:
     def read_only(self, img: np.ndarray, min_quality: float | None = None,
                   enabled: dict[str, bool] | None = None) -> dict[str, Any]:
         """Read + analyse a chart without storing anything (continuous screen reading)."""
-        reading = self._reader(min_quality).read(img).to_dict()
+        reading = self._read(img, min_quality)
         reading["technical"] = analyze_reading(reading, enabled)
         reading["knowledge"] = self._related_knowledge(reading["technical"])
         reading["decision"] = self._decide(reading, "screen", None)
         return reading
+
+    def _read(self, img: np.ndarray, min_quality: float | None) -> dict:
+        """Read the chart, then keep only the newest candles the user asked for (Settings.chart_max_candles)."""
+        reading = self._reader(min_quality).read(img).to_dict()
+        n = self.signals.settings.get().chart_max_candles if self.signals is not None else 0
+        return limit_candles(reading, n)
 
     def _decide(self, reading: dict, stream: str, session_id: int | None) -> dict | None:
         if self.signals is None:
@@ -120,7 +126,7 @@ class ChartInputService:
             tmp.write_bytes(png_bytes)
             tmp.replace(dest)
 
-        reading = self._reader(min_quality).read(img).to_dict()
+        reading = self._read(img, min_quality)
         reading["technical"] = analyze_reading(reading, enabled)  # Phase 4: closed candles only
         reading["knowledge"] = self._related_knowledge(reading["technical"])  # Phase 5: approved only
         reading["decision"] = self._decide(reading, f"input:{input_mode}", session_id)  # Phase 8

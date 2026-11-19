@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../core/companion.dart';
 import '../core/engine_api.dart';
+import '../core/image_prep.dart';
 import '../core/window_controller.dart';
 import '../l10n/strings.dart';
 import '../platform/android_overlay.dart';
@@ -30,6 +31,9 @@ class AppState extends ChangeNotifier {
   /// engine declares what it lacks (`knowledge: false`, …) so those screens are hidden.
   bool has(String capability) => capabilities[capability] != false;
   bool get isOnDevice => capabilities['engine'] == 'phone';
+
+  /// Longest side chart images are shrunk to before analysis (0 = original); engines without the setting: 1280.
+  int get chartMaxSide => settings['chart_max_side'] as int? ?? 1280;
   final Future<void> Function()? onSwitchMode;
 
   final EngineApi engine;
@@ -135,7 +139,8 @@ class AppState extends ChangeNotifier {
 
   /// Submit a chart image for analysis (upload, share or screenshot).
   Future<Json> analyzeChart(UploadFile image, {String inputMode = 'upload'}) async {
-    final r = (await _guard(() => engine.submitChartImage(image, inputMode: inputMode)))!;
+    final r = (await _guard(() async =>
+        engine.submitChartImage(await prepareChartImage(image, chartMaxSide), inputMode: inputMode)))!;
     lastChartResult = r;
     notifyListeners();
     return r;

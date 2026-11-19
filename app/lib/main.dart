@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'core/companion.dart';
 import 'core/engine_mode.dart';
+import 'core/image_prep.dart';
 import 'core/engine_api.dart';
 import 'core/engine_host.dart';
 import 'core/http_engine_api.dart';
@@ -108,12 +109,14 @@ Future<void> startApp() async {
       share
         ..engine = engine
         ..libraryAvailable = library
+        ..prepareImage = ((f) => prepareChartImage(f, state.chartMaxSide))
         ..onOutcomes = (o) => _reportShares(state, o);
     } else {
       _share = ShareIntake(
           engine: engine,
           source: ReceiveSharingIntentSource(),
           libraryAvailable: library,
+          prepareImage: (f) => prepareChartImage(f, state.chartMaxSide),
           onOutcomes: (o) => _reportShares(state, o));
       await _share!.start();
     }

@@ -314,6 +314,20 @@ List<T> _stableSortBy<T>(List<T> l, int Function(T) key) {
   }
   dedup = [for (var k = 0; k < dedup.length; k++) if (keep[k]) dedup[k]];
 
+  // label fragments right after the last candle (the current-price tag cut by its text into 1-2 pieces, typical
+  // after downscaling) must not become the "forming" candle: no wicks, and closer than the candle spacing or
+  // clearly narrower than the candles. A real candle — even a forming one without wicks yet — sits on its own
+  // grid slot with the full body width.
+  if (dedup.length >= 5) {
+    final sp = medianOf([for (var k = 1; k < dedup.length; k++) dedup[k].x - dedup[k - 1].x]);
+    bool fragment(DetectedCandle c, DetectedCandle prev) =>
+        boxy(c) && (c.x - prev.x < 0.9 * sp || c.right - c.left + 1 < 0.8 * medW);
+    while (dedup.length >= 5 && fragment(dedup.last, dedup[dedup.length - 2])) {
+      dedup = dedup.sublist(0, dedup.length - 1);
+      diag['dropped_label_runs'] = (diag['dropped_label_runs'] as int) + 1;
+    }
+  }
+
   diag['median_body_width'] = medW;
   if (dedup.length >= 3) {
     final gaps = [for (var k = 1; k < dedup.length; k++) (dedup[k].x - dedup[k - 1].x).toDouble()];

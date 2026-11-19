@@ -140,3 +140,40 @@ class ChartReader {
     };
   }
 }
+
+/// Keep only the newest `n` candles of a reading (the user's "candles to read" setting) — same as the computer
+/// engine's `limit_candles`. Relative values are recomputed over the kept candles. `n` of 0 keeps everything.
+Map<String, dynamic> limitCandles(Map<String, dynamic> reading, int n) {
+  final candles = [for (final c in (reading['candles'] as List? ?? const [])) (c as Map).cast<String, dynamic>()];
+  if (n <= 0 || candles.length <= n) return reading;
+  final kept = candles.sublist(candles.length - n);
+  final yTop = kept.map((c) => c['y_high'] as int).reduce(math.min);
+  final yBot = kept.map((c) => c['y_low'] as int).reduce(math.max);
+  final span = math.max(1, yBot - yTop);
+  final fresh = [
+    for (var i = 0; i < kept.length; i++)
+      {
+        ...kept[i],
+        'index': i,
+        for (final k in const ['high', 'low', 'open', 'close']) 'rel_$k': roundTo(1 - ((kept[i]['y_$k'] as int) - yTop) / span, 4),
+      }
+  ];
+  final warnings = [...(reading['warnings'] as List? ?? const []), 'candles_limited'];
+  final closed = fresh.sublist(0, fresh.length - 1);
+  return {
+    ...reading,
+    'candles': fresh,
+    'warnings': warnings,
+    'candles_limit': {'kept': n, 'total': candles.length},
+    'summary': {
+      ...((reading['summary'] as Map?)?.cast<String, dynamic>() ?? const {}),
+      'candles': fresh.length,
+      'closed_candles': closed.length,
+      'bullish': closed.where((c) => c['bullish'] == true).length,
+      'bearish': closed.where((c) => c['bullish'] != true).length,
+      'last_closed_direction': closed.isEmpty ? null : (closed.last['bullish'] == true ? 'up' : 'down'),
+      'last_closed_close': closed.isEmpty ? null : closed.last['close'],
+      'warnings': warnings,
+    },
+  };
+}

@@ -283,6 +283,19 @@ def detect_candles(img: np.ndarray) -> tuple[list[DetectedCandle], dict]:
         i = j + 1
     dedup = [c for c, k in zip(dedup, keep) if k]
 
+    # label fragments right after the last candle (the current-price tag cut by its text into 1-2 pieces,
+    # typical after downscaling) must not become the "forming" candle. They have no wicks and either sit closer
+    # than the candle spacing or are clearly narrower than the candles; a real candle — even a forming one
+    # without wicks yet — sits on its own grid slot and has the full body width.
+    if len(dedup) >= 5:
+        sp = float(np.median(np.diff([c.x for c in dedup])))
+        def fragment(c: DetectedCandle, prev: DetectedCandle) -> bool:
+            return boxy(c) and ((c.x - prev.x) < 0.9 * sp or (c.right - c.left + 1) < 0.8 * med_w)
+
+        while len(dedup) >= 5 and fragment(dedup[-1], dedup[-2]):
+            dedup = dedup[:-1]
+            diag["dropped_label_runs"] += 1
+
     diag["median_body_width"] = med_w
     xs = np.array([c.x for c in dedup])
     if len(xs) >= 3:

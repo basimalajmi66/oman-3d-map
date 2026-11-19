@@ -163,6 +163,43 @@ class ChartReader:
         )
 
 
+def limit_candles(reading: dict, n: int | None) -> dict:
+    """Keep only the newest ``n`` candles of a reading (the user's "candles to read" setting).
+
+    Relative values are recomputed over the kept candles; the summary is updated and the reading says how
+    many candles were dropped. ``n`` of 0 / None keeps everything.
+    """
+    candles = reading.get("candles") or []
+    if not n or len(candles) <= n:
+        return reading
+    kept = candles[-n:]
+    y_top = min(c["y_high"] for c in kept)
+    y_bot = max(c["y_low"] for c in kept)
+    span = max(1, y_bot - y_top)
+    new = []
+    for i, c in enumerate(kept):
+        d = dict(c)
+        d["index"] = i
+        for k in ("high", "low", "open", "close"):
+            d[f"rel_{k}"] = round(1 - (c[f"y_{k}"] - y_top) / span, 4)
+        new.append(d)
+    out = dict(reading)
+    out["candles"] = new
+    out["warnings"] = list(reading.get("warnings", [])) + ["candles_limited"]
+    out["candles_limit"] = {"kept": n, "total": len(candles)}
+    closed = new[:-1]
+    summary = dict(reading.get("summary") or {})
+    summary.update({
+        "candles": len(new), "closed_candles": len(closed),
+        "bullish": sum(1 for c in closed if c["bullish"]), "bearish": sum(1 for c in closed if not c["bullish"]),
+        "last_closed_direction": ("up" if closed[-1]["bullish"] else "down") if closed else None,
+        "last_closed_close": closed[-1].get("close") if closed else None,
+        "warnings": out["warnings"],
+    })
+    out["summary"] = summary
+    return out
+
+
 def annotate(img: np.ndarray, reading: dict) -> np.ndarray:
     """Draw what was detected so the user can verify the reading visually."""
     out = img.copy()

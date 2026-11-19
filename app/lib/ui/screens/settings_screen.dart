@@ -292,6 +292,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           value: s['continuous_analysis'] == true,
           onChanged: (v) => _set('continuous_analysis', v),
         ),
+        _dropdown<int>('chart_max_side', app.t('chart_max_side'), const [800, 1024, 1280, 1600, 1920, 0],
+            (v) => v == 0 ? app.t('chart_original') : '$v px'),
+        _dropdown<int>('chart_max_candles', app.t('chart_max_candles'), const [60, 80, 100, 150, 200, 0],
+            (v) => v == 0 ? app.t('chart_all_candles') : '$v'),
         _header('indicators_section'),
         ..._indicators.map((name) => SwitchListTile(
               key: Key('ind_$name'),

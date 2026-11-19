@@ -204,3 +204,28 @@ def test_revoking_permission_stops_continuous_reading(client):
     assert client.get("/analysis/status").json()["screen_watch"]["active"] is True
     client.patch("/settings", json={"screen_capture_allowed": False})
     assert client.get("/analysis/status").json()["screen_watch"]["active"] is False
+
+
+def test_only_the_newest_candles_are_read(client):
+    """Settings.chart_max_candles: the newest N candles are kept, the reading says how many were dropped."""
+    from uata.vision.synthetic import random_walk_ohlc, render_chart
+    png = cv2.imencode(".png", render_chart(random_walk_ohlc(130, seed=4), style="dark_tv", width=1400).image)[1].tobytes()
+    client.patch("/settings", json={"chart_max_candles": 60})
+    r = client.post("/analysis/inputs", files={"file": ("c.png", png)}).json()
+    reading = client.get(f"/analysis/inputs/{r['input']['id']}/reading").json()
+    assert len(reading["candles"]) == 60 and reading["candles_limit"] == {"kept": 60, "total": 130}
+    assert "candles_limited" in reading["warnings"]
+    assert reading["candles"][0]["index"] == 0 and reading["candles"][-1]["status"] == "possibly_forming"
+    assert max(c["rel_high"] for c in reading["candles"]) == 1.0 and min(c["rel_low"] for c in reading["candles"]) == 0.0
+    assert r["analysis"]["reading"]["candles"] == 60 and r["analysis"]["technical"]["candles_used"] == 59
+    client.patch("/settings", json={"chart_max_candles": 0})
+    r = client.post("/analysis/inputs", files={"file": ("c2.png", png)}).json()
+    assert r["analysis"]["reading"]["candles"] == 130
+
+
+def test_chart_size_settings_are_validated(client):
+    assert client.get("/settings").json()["chart_max_side"] == 1280
+    assert client.get("/settings").json()["chart_max_candles"] == 100
+    assert client.patch("/settings", json={"chart_max_candles": 30}).status_code == 422  # strategies need 50+
+    assert client.patch("/settings", json={"chart_max_side": 300}).status_code == 422
+    assert client.patch("/settings", json={"chart_max_side": 0}).json()["chart_max_side"] == 0

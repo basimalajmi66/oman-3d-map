@@ -34,6 +34,8 @@ void main() {
       {'seed': 12, 'n': 6, 'render': {'style': 'dark_tv'}}, // too few candles
       {'uptrend': true, 'render': {'style': 'dark_tv'}},
       {'seed': 13, 'render': {'style': 'dark_tv', 'price_tag': false, 'axis_labels': false}},
+      {'seed': 14, 'n': 130, 'render': {'style': 'dark_tv', 'width': 1400}, 'limit': 60}, // newest 60 candles only
+      {'seed': 15, 'n': 90, 'render': {'style': 'light_tv'}, 'limit': 100}, // fewer than the limit: unchanged
     ];
     for (var i = 0; i < cases.length; i++) {
       cases[i]['path'] = '${dir.path}/chart_$i.png';
@@ -41,7 +43,8 @@ void main() {
     final py = await python({'op': 'render_read', 'cases': cases}) as List;
     var usable = 0, abstained = 0;
     for (var i = 0; i < cases.length; i++) {
-      final dart = await ChartReader().read(loadRgb(cases[i]['path'] as String));
+      var dart = await ChartReader().read(loadRgb(cases[i]['path'] as String));
+      if (cases[i]['limit'] != null) dart = limitCandles(dart, cases[i]['limit'] as int);
       final ref = Map<String, dynamic>.from(py[i] as Map);
       expectSame(dart, ref, path: 'case$i ${cases[i]['render']} ${cases[i]['degrade'] ?? ''}', tol: 1e-9);
       dart['usable'] == true ? usable++ : abstained++;

@@ -50,7 +50,15 @@ class ShareOutcome {
 /// documents and videos go to the knowledge library (pending your approval).
 /// Nothing is uploaded anywhere except the local engine.
 class ShareIntake {
-  ShareIntake({required this.engine, required this.source, required this.onOutcomes, this.libraryAvailable = true});
+  ShareIntake(
+      {required this.engine,
+      required this.source,
+      required this.onOutcomes,
+      this.libraryAvailable = true,
+      this.prepareImage});
+
+  /// Shrinks shared chart images before analysis (Settings.chart_max_side).
+  Future<UploadFile> Function(UploadFile)? prepareImage;
 
   /// False on the phone engine (no knowledge library yet): documents are reported as unsupported.
   bool libraryAvailable;
@@ -86,7 +94,7 @@ class ShareIntake {
         final upload = UploadFile(name: item.name, length: await file.length(), openRead: file.openRead);
         if (item.isImage) {
           out.add(ShareOutcome(item, ShareOutcomeKind.chartAnalysed,
-              result: await engine.submitChartImage(upload, inputMode: 'share')));
+              result: await engine.submitChartImage(await (prepareImage?.call(upload) ?? Future.value(upload)), inputMode: 'share')));
         } else {
           out.add(ShareOutcome(item, ShareOutcomeKind.addedToLibrary, result: await engine.uploadFile(upload)));
         }

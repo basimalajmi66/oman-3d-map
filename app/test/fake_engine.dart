@@ -10,6 +10,8 @@ class FakeEngine implements EngineApi {
     'candle_timeframe_sec': 30,
     'trade_duration_min_sec': 60,
     'trade_duration_max_sec': 180,
+    'chart_max_side': 1280,
+    'chart_max_candles': 100,
     'trading_mode': 'manual',
     'continuous_analysis': false,
     'min_confidence_to_signal': 0.65,

@@ -31,6 +31,10 @@ INDICATORS = (
 )
 
 ALLOWED_TIMEFRAMES_SEC = (5, 10, 15, 30, 60, 120, 180, 300, 900, 1800, 3600, 14400, 86400)
+# longest side a chart image is shrunk to before reading (0 = keep the original size)
+ALLOWED_CHART_MAX_SIDE = (0, 800, 1024, 1280, 1600, 1920)
+# newest candles kept from a reading (0 = all); strategies need 50+ closed candles, so the minimum is 60
+ALLOWED_CHART_MAX_CANDLES = (0, 60, 80, 100, 150, 200)
 
 
 def _default_indicators() -> dict[str, bool]:
@@ -67,6 +71,9 @@ class Settings(BaseModel):
     # region of the screen to read: None = whole primary monitor
     capture_region: dict[str, int] | None = None
     capture_interval_sec: int = Field(5, ge=2, le=60)  # continuous screen reading cadence
+    # chart images: shrink before reading (faster, less memory) and how many of the newest candles to keep
+    chart_max_side: int = 1280
+    chart_max_candles: int = 100
     external_data_sources_allowed: bool = False
     # optional local speech-to-text model folder (faster-whisper / CTranslate2); never downloaded
     stt_model_path: str | None = None
@@ -78,6 +85,10 @@ class Settings(BaseModel):
     def _check(self) -> "Settings":
         if self.candle_timeframe_sec not in ALLOWED_TIMEFRAMES_SEC:
             raise ValueError(f"candle_timeframe_sec must be one of {ALLOWED_TIMEFRAMES_SEC}")
+        if self.chart_max_side not in ALLOWED_CHART_MAX_SIDE:
+            raise ValueError(f"chart_max_side must be one of {ALLOWED_CHART_MAX_SIDE}")
+        if self.chart_max_candles not in ALLOWED_CHART_MAX_CANDLES:
+            raise ValueError(f"chart_max_candles must be one of {ALLOWED_CHART_MAX_CANDLES}")
         if self.trade_duration_min_sec > self.trade_duration_max_sec:
             raise ValueError("trade_duration_min_sec must be <= trade_duration_max_sec")
         unknown = set(self.indicators) - set(INDICATORS)
