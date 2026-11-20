@@ -264,7 +264,11 @@ const Map<String, Map<String, String>> _strings = {
     'en': 'no candles found, or unsupported colours (green/red supported for now)'
   },
   'a_too_few_candles': {'ar': 'عدد الشموع أقل من 10', 'en': 'fewer than 10 candles'},
-  'a_image_quality_below_threshold': {'ar': 'الجودة أقل من الحد في الإعدادات', 'en': 'quality below your threshold'},
+  'a_image_quality_below_threshold': {
+    'ar': 'الجودة أقل من الحد في الإعدادات. للتحسين: قصّ الصورة على الشارت فقط وكبّر الشموع، أبعد أي لوحة أو زر يغطي الشموع، واختر حجم صورة أكبر في الإعدادات (1600 أو الأصلي).',
+    'en': 'quality below your threshold. To improve: crop to the chart only and zoom so candles are larger, move any panel or button off the candles, and pick a larger image size in settings (1600 or original).'
+  },
+  'w_candles_limited': {'ar': 'قُرئت أحدث الشموع فقط (حسب الإعدادات)', 'en': 'only the newest candles were read (settings)'},
   // phase 4: technical analysis
   'technical': {'ar': 'التحليل الفني (الشموع المكتملة فقط)', 'en': 'Technical analysis (closed candles only)'},
   'technical_not_signal': {
