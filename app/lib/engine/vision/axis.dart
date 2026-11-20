@@ -123,32 +123,58 @@ int otsu(List<int> hist) {
   return (x0 + math.max(0, a - 2), x0 + math.min(w, b + 3));
 }
 
-/// Ink pixels of the strip x0..x1 (differ from the strip's background by > 40 grey levels), without grid lines:
-/// rows inked across > 60% of the strip and columns inked over > 50% of the height are not text.
+/// Text-like ink in the strip x0..x1: sharp edges, without straight lines (unbroken runs of 60 px or more).
 Uint8List inkMask(RgbImage img, int x0, int x1) {
   final w = x1 - x0, h = img.height;
   final grey = toGreyStrip(img, x0, x1);
-  final bg = _mode(grey);
+  // text = sharp edges (a jump of > 45 grey levels within 2 px): soft backgrounds (photos behind the chart,
+  // gradients) have none, whatever their colour
   final ink = Uint8List(w * h);
-  for (var i = 0; i < w * h; i++) {
-    if ((grey[i] - bg).abs() > 40) ink[i] = 1;
-  }
   for (var y = 0; y < h; y++) {
-    var n = 0;
     for (var x = 0; x < w; x++) {
-      n += ink[y * w + x];
+      final g = grey[y * w + x];
+      var e = 0;
+      if (x >= 2) e = math.max(e, (g - grey[y * w + x - 2]).abs());
+      if (x + 2 < w) e = math.max(e, (g - grey[y * w + x + 2]).abs());
+      if (y >= 2) e = math.max(e, (g - grey[(y - 2) * w + x]).abs());
+      if (y + 2 < h) e = math.max(e, (g - grey[(y + 2) * w + x]).abs());
+      if (e > 45) ink[y * w + x] = 1;
     }
-    if (n > 0.6 * w) ink.fillRange(y * w, y * w + w, 0);
+  }
+  // straight lines (grid, axes, price lines) are long unbroken runs; characters are short
+  const maxRun = 60;
+  for (var y = 0; y < h; y++) {
+    var x = 0;
+    while (x < w) {
+      if (ink[y * w + x] == 0) {
+        x++;
+        continue;
+      }
+      var e = x;
+      while (e + 1 < w && ink[y * w + e + 1] != 0) {
+        e++;
+      }
+      if (e - x + 1 >= maxRun) ink.fillRange(y * w + x, y * w + e + 1, 0);
+      x = e + 1;
+    }
   }
   for (var x = 0; x < w; x++) {
-    var n = 0;
-    for (var y = 0; y < h; y++) {
-      n += ink[y * w + x];
-    }
-    if (n > 0.5 * h) {
-      for (var y = 0; y < h; y++) {
-        ink[y * w + x] = 0;
+    var y = 0;
+    while (y < h) {
+      if (ink[y * w + x] == 0) {
+        y++;
+        continue;
       }
+      var e = y;
+      while (e + 1 < h && ink[(e + 1) * w + x] != 0) {
+        e++;
+      }
+      if (e - y + 1 >= maxRun) {
+        for (var q = y; q <= e; q++) {
+          ink[q * w + x] = 0;
+        }
+      }
+      y = e + 1;
     }
   }
   return ink;
@@ -166,16 +192,33 @@ Uint8List toGreyStrip(RgbImage img, int x0, int x1) {
   return grey;
 }
 
-int _mode(Uint8List v) {
-  final hist = List<int>.filled(256, 0);
-  for (final g in v) {
-    hist[g]++;
+
+/// Column groups with ink in the strip (separated by >= 25 empty columns), left to right.
+List<(int, int)> columnGroups(RgbImage img, int x0, int x1) {
+  final w = x1 - x0, h = img.height;
+  if (w < 4) return [];
+  final mask = inkMask(img, x0, x1);
+  final colInk = List<int>.filled(w, 0);
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      colInk[x] += mask[y * w + x];
+    }
   }
-  var bg = 0;
-  for (var g = 1; g < 256; g++) {
-    if (hist[g] > hist[bg]) bg = g;
+  final out = <(int, int)>[];
+  int? start;
+  var end = 0, gap = 0;
+  for (var x = 0; x < w; x++) {
+    if (colInk[x] >= 2) {
+      start ??= x;
+      end = x;
+      gap = 0;
+    } else if (start != null && ++gap >= 25) {
+      out.add((x0 + math.max(0, start - 2), x0 + math.min(w, end + 3)));
+      start = null;
+    }
   }
-  return bg;
+  if (start != null) out.add((x0 + math.max(0, start - 2), x0 + math.min(w, end + 3)));
+  return out;
 }
 
 /// Text lines in the strip x0..x1: rows that differ from the strip's background, grouped into bands 5–60 px tall,
@@ -223,8 +266,12 @@ AxisJob prepareAxisJob(RgbImage img, int plotLeft, int plotRight) {
     if (w - plotRight > 25) ('right', plotRight + 3, w),
     if (plotLeft > 25) ('left', 0, math.max(1, plotLeft - 3)),
   ]) {
-    final (x0, x1) = labelColumn(img, sx0, sx1, fromRight: side == 'left');
-    final bands = textBands(img, x0, x1);
+    // the price axis is the column group with the most text lines (not e.g. the timer next to the last candle)
+    var bands = <(int, int, int, int)>[];
+    for (final (gx0, gx1) in columnGroups(img, sx0, sx1)) {
+      final b = textBands(img, gx0, gx1);
+      if (b.length > bands.length) bands = b;
+    }
     // each line is one OCR call on the phone: at most 12, spread over the whole axis
     final pick = bands.length <= 12 ? bands : [for (var i = 0; i < 12; i++) bands[(i * (bands.length - 1) / 11).round()]];
     sides[side] = [
@@ -294,9 +341,16 @@ PriceScale? scaleFromLabels(List<(double, String)> labels, String side) {
     if (slope < 0 && r2 >= 0.9995) {
       return PriceScale(slope, intercept, pts.length, roundTo(r2, 6), pts.map((p) => p.$3).reduce(math.max), side);
     }
+    // drop the label whose removal fits best (the largest residual can belong to a good label: a wrong reading
+    // pulls the least-squares line towards itself)
     var worst = 0;
-    for (var i = 1; i < pts.length; i++) {
-      if ((pts[i].$2 - (slope * pts[i].$1 + intercept)).abs() > (pts[worst].$2 - (slope * pts[worst].$1 + intercept)).abs()) {
+    var bestR2 = double.negativeInfinity;
+    for (var i = 0; i < pts.length; i++) {
+      final rest = [...pts]..removeAt(i);
+      final f = fitLine(rest);
+      final r = f == null ? double.negativeInfinity : f.$3;
+      if (r > bestR2) {
+        bestR2 = r;
         worst = i;
       }
     }

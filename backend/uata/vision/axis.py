@@ -149,8 +149,13 @@ def read_price_scale(img: np.ndarray, plot_left: int, plot_right: int) -> tuple[
             if slope < 0 and r2 >= 0.9995:  # prices rise upwards
                 decimals = max(p[2] for p in pts)
                 return PriceScale(slope, intercept, len(pts), round(r2, 6), decimals, side), diag
-            resid = [abs(p[1] - (slope * p[0] + intercept)) for p in pts]
-            pts.pop(int(np.argmax(resid)))
+            # drop the label whose removal fits best (a wrong reading pulls the line towards itself, so the
+            # largest residual can belong to a good label)
+            scores = []
+            for i in range(len(pts)):
+                f = _fit(pts[:i] + pts[i + 1:])
+                scores.append(f[2] if f is not None else float("-inf"))
+            pts.pop(int(np.argmax(scores)))
     return None, diag
 
 
