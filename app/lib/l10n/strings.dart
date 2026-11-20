@@ -457,7 +457,10 @@ const Map<String, Map<String, String>> _strings = {
     'en': 'No approved strategy tested on this timeframe — no signal. Approve one in Training.'
   },
   'reason_timeframe_mismatch': {'ar': 'الإطار الزمني في الشارت يختلف عن إعداداتك', 'en': 'Chart timeframe differs from your settings'},
-  'reason_insufficient_candles': {'ar': 'شموع مكتملة غير كافية للتحليل', 'en': 'Not enough closed candles to analyse'},
+  'reason_insufficient_candles': {
+    'ar': 'شموع مكتملة أقل من 30 — صغّر الشارت في المنصة (Zoom out) ليظهر 40 شمعة أو أكثر، ثم صوّر من جديد',
+    'en': 'Fewer than 30 closed candles — zoom the chart out on the platform so 40+ candles show, then take a new picture'
+  },
   'reason_insufficient_history_for_strategies': {
     'ar': 'الشارت لا يُظهر 50 شمعة مكتملة لتقييم شروط الاستراتيجية — صغّر الشارت لإظهار شموع أكثر',
     'en': 'The chart does not show 50 closed candles to evaluate strategy conditions — zoom out'

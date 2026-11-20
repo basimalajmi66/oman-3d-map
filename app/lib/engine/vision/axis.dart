@@ -99,12 +99,11 @@ int otsu(List<int> hist) {
 (int, int) labelColumn(RgbImage img, int x0, int x1, {bool fromRight = false}) {
   final w = x1 - x0, h = img.height;
   if (w < 4) return (x0, x1);
-  final grey = toGreyStrip(img, x0, x1);
-  final bg = _mode(grey);
+  final mask = inkMask(img, x0, x1);
   final colInk = List<int>.filled(w, 0);
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
-      if ((grey[y * w + x] - bg).abs() > 40) colInk[x]++;
+      colInk[x] += mask[y * w + x];
     }
   }
   final order = fromRight ? [for (var x = w - 1; x >= 0; x--) x] : [for (var x = 0; x < w; x++) x];
@@ -122,6 +121,37 @@ int otsu(List<int> hist) {
   if (start == null) return (x0, x1);
   final a = fromRight ? end! : start, b = fromRight ? start : end!;
   return (x0 + math.max(0, a - 2), x0 + math.min(w, b + 3));
+}
+
+/// Ink pixels of the strip x0..x1 (differ from the strip's background by > 40 grey levels), without grid lines:
+/// rows inked across > 60% of the strip and columns inked over > 50% of the height are not text.
+Uint8List inkMask(RgbImage img, int x0, int x1) {
+  final w = x1 - x0, h = img.height;
+  final grey = toGreyStrip(img, x0, x1);
+  final bg = _mode(grey);
+  final ink = Uint8List(w * h);
+  for (var i = 0; i < w * h; i++) {
+    if ((grey[i] - bg).abs() > 40) ink[i] = 1;
+  }
+  for (var y = 0; y < h; y++) {
+    var n = 0;
+    for (var x = 0; x < w; x++) {
+      n += ink[y * w + x];
+    }
+    if (n > 0.6 * w) ink.fillRange(y * w, y * w + w, 0);
+  }
+  for (var x = 0; x < w; x++) {
+    var n = 0;
+    for (var y = 0; y < h; y++) {
+      n += ink[y * w + x];
+    }
+    if (n > 0.5 * h) {
+      for (var y = 0; y < h; y++) {
+        ink[y * w + x] = 0;
+      }
+    }
+  }
+  return ink;
 }
 
 Uint8List toGreyStrip(RgbImage img, int x0, int x1) {
@@ -153,9 +183,8 @@ int _mode(Uint8List v) {
 List<(int, int, int, int)> textBands(RgbImage img, int x0, int x1) {
   final w = x1 - x0, h = img.height;
   if (w < 4) return [];
-  final grey = toGreyStrip(img, x0, x1);
-  final bg = _mode(grey);
-  bool ink(int x, int y) => (grey[y * w + x] - bg).abs() > 40;
+  final mask = inkMask(img, x0, x1);
+  bool ink(int x, int y) => mask[y * w + x] != 0;
   final rowInk = [for (var y = 0; y < h; y++) [for (var x = 0; x < w; x++) if (ink(x, y)) 1].length];
   final out = <(int, int, int, int)>[];
   var y = 0;
