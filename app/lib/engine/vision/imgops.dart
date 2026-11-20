@@ -146,6 +146,39 @@ Mask openVertical(Mask m, int kh) {
   return Mask.from(w, h, out);
 }
 
+/// Morphological opening with a (kw × kh) rectangle, anchor (kw ~/ 2, kh ~/ 2), same border rules as
+/// [openVertical]. Separable (rows then columns) — identical to the 2-D operation for binary masks.
+Mask openRect(Mask m, int kw, int kh) {
+  final w = m.width, h = m.height, ax = kw ~/ 2, ay = kh ~/ 2;
+  Uint8List pass(Uint8List src, bool erode, bool horizontal) {
+    final out = Uint8List(w * h);
+    final k = horizontal ? kw : kh, a = horizontal ? ax : ay, n = horizontal ? w : h;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        final pos = horizontal ? x : y;
+        var v = erode ? 1 : 0;
+        for (var q = pos - a; q < pos - a + k; q++) {
+          if (q < 0 || q >= n) continue;
+          final s = horizontal ? src[y * w + q] : src[q * w + x];
+          if (erode && s == 0) {
+            v = 0;
+            break;
+          }
+          if (!erode && s != 0) {
+            v = 1;
+            break;
+          }
+        }
+        out[y * w + x] = v;
+      }
+    }
+    return out;
+  }
+
+  final er = pass(pass(m.data, true, true), true, false);
+  return Mask.from(w, h, pass(pass(er, false, true), false, false));
+}
+
 class Component {
   Component(this.label, this.x, this.y, this.w, this.h, this.area);
   final int label;

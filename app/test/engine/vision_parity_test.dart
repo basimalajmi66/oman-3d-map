@@ -36,6 +36,10 @@ void main() {
       {'seed': 13, 'render': {'style': 'dark_tv', 'price_tag': false, 'axis_labels': false}},
       {'seed': 14, 'n': 130, 'render': {'style': 'dark_tv', 'width': 1400}, 'limit': 60}, // newest 60 candles only
       {'seed': 15, 'n': 90, 'render': {'style': 'light_tv'}, 'limit': 100}, // fewer than the limit: unchanged
+      // indicator lines and BUY/SELL labels in the candle colours (Pocket Option style): body-first reading
+      for (final (seed, style) in [(0, 'dark_tv'), (4, 'light_tv'), (7, 'dark_classic'), (10, 'dark_tv')])
+        {'seed': seed, 'n': 80, 'render': {'style': style, 'supertrend': true, 'signal_labels': true, 'width': 1400, 'height': 720}},
+      {'seed': 2, 'n': 60, 'render': {'style': 'light_tv', 'supertrend': true}}, // the line only
     ];
     for (var i = 0; i < cases.length; i++) {
       cases[i]['path'] = '${dir.path}/chart_$i.png';
@@ -49,7 +53,9 @@ void main() {
       expectSame(dart, ref, path: 'case$i ${cases[i]['render']} ${cases[i]['degrade'] ?? ''}', tol: 1e-9);
       dart['usable'] == true ? usable++ : abstained++;
     }
-    expect(usable, greaterThan(10));
+    expect(usable, greaterThan(14));
+    final modes = [for (final r in py) (r as Map)['detection']['mode']];
+    expect(modes.where((m) => m == 'bodies_first').length, greaterThanOrEqualTo(4)); // the new path is exercised
     expect(abstained, greaterThan(0));
     dir.deleteSync(recursive: true);
   }, skip: paritySkip, timeout: const Timeout(Duration(minutes: 3)));
