@@ -45,7 +45,7 @@ Future<void> showChartResult(BuildContext context, Json result) {
                   key: const Key('chart_result_trade')),
             ...strategyEvidence(app, analysis),
             const SizedBox(height: 8),
-            Text('${app.t('image_size')}: ${input['width']}×${input['height']}'),
+            Text('${app.t('image_size')}: \u2066${input['width']}×${input['height']}\u2069'), // isolated: RTL text would show it as height×width
             Text('${app.t('data_basis')}: ${basis == 'image_only' ? app.t('image_only') : basis ?? '—'}'),
             if (quality != null) Text('${app.t('data_quality')}: ${(quality * 100).round()}%', key: const Key('chart_quality')),
             if (reading != null) ..._readingLines(app, reading),
