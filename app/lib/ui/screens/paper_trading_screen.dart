@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/engine_api.dart';
@@ -15,8 +17,44 @@ class PaperTradingScreen extends StatefulWidget {
 
 class _PaperTradingScreenState extends State<PaperTradingScreen> {
   bool _busy = false;
+  bool _bgOn = false;
   AppState get app => AppScope.read(context);
   PaperTrader get paper => app.paper!;
+
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshBackground();
+    // the background service writes the session files: show its progress while this screen is open
+    _tick = Timer.periodic(const Duration(seconds: 15), (_) => _refreshBackground());
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshBackground() async {
+    final on = await AppScope.read(context).background?.isRunning() ?? false;
+    if (mounted) setState(() => _bgOn = on);
+  }
+
+  Future<void> _toggleBackground(bool on) async {
+    final bg = app.background!;
+    if (on) {
+      if (app.settings['external_data_sources_allowed'] != true) {
+        await app.updateSettings({'external_data_sources_allowed': true}); // turning it on = consent to download prices
+      }
+      final err = await bg.start(app.lang);
+      if (err != null) _snack(app.t(err));
+    } else {
+      await bg.stop();
+    }
+    await _refreshBackground();
+  }
 
   Future<void> _new() async {
     final strategies = [for (final s in await app.engine.listStrategies()) if (s['definition'] != null) s];
@@ -69,6 +107,23 @@ class _PaperTradingScreenState extends State<PaperTradingScreen> {
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: Padding(padding: const EdgeInsets.all(12), child: Text(app.t('paper_intro'), key: const Key('paper_intro'))),
         ),
+        if (app.background != null)
+          Card(
+            child: Column(children: [
+              SwitchListTile(
+                key: const Key('bg_switch'),
+                secondary: const Icon(Icons.notifications_active_outlined),
+                title: Text(app.t('bg_title')),
+                subtitle: Text(app.t('bg_sub')),
+                value: _bgOn,
+                onChanged: _toggleBackground,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Text(app.t('bg_fresh_note'), key: const Key('bg_note'), style: Theme.of(context).textTheme.bodySmall),
+              ),
+            ]),
+          ),
         if (_busy) const LinearProgressIndicator(),
         if (sessions.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(app.t('paper_none')))),
         for (final s in sessions) _sessionCard(app, s),
@@ -113,7 +168,7 @@ class _PaperTradingScreenState extends State<PaperTradingScreen> {
             ),
           Text(app.t('paper_net_hint'), style: Theme.of(context).textTheme.bodySmall),
           Wrap(spacing: 8, children: [
-            if (s.status == 'running')
+            if (s.status == 'running' && !_bgOn) // with background mode on, the service updates (never two at once)
               TextButton.icon(key: Key('paper_update_${s.id}'), onPressed: _busy ? null : () => _update(s), icon: const Icon(Icons.refresh), label: Text(app.t('paper_update'))),
             if (s.status == 'running')
               TextButton.icon(key: Key('paper_stop_${s.id}'), onPressed: () => setState(() => paper.stop(s.id)), icon: const Icon(Icons.stop), label: Text(app.t('stop'))),

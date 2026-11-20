@@ -36,6 +36,7 @@ class LocalDb {
     d.execute('PRAGMA foreign_keys = ON');
     d.execute('PRAGMA journal_mode = WAL');
     d.execute('PRAGMA synchronous = NORMAL');
+    d.execute('PRAGMA busy_timeout = 5000'); // the background service has its own connection to the same file
     return d;
   }
 

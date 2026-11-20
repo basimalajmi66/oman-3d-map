@@ -53,6 +53,8 @@ dependencies:
   archive: ^4.7.1
   pointycastle: ^4.0.0
   xml: ^7.1.0
+  flutter_foreground_task: ^11.0.3
+  flutter_local_notifications: ^23.0.3
 
 dev_dependencies:
   flutter_test:

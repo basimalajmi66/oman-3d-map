@@ -35,19 +35,20 @@ class PaperTrade {
 }
 
 /// Forward trades of one strategy on `fs` (candle open times `times`), considering only signals on candles that
-/// opened at or after `startTime`. Returns finished trades and whether a trade is still waiting for its expiry.
-(List<PaperTrade>, bool) forwardTrades(FeatureSet fs, List<int> times, Map definition, int timeframeSec, int startTime) {
+/// opened at or after `startTime`. Returns finished trades and the candle index of a signal whose trade is still
+/// waiting for its expiry (null when none).
+(List<PaperTrade>, int?) forwardTrades(FeatureSet fs, List<int> times, Map definition, int timeframeSec, int startTime) {
   final bars = math.max(1, ((definition['duration_sec'] as num) / timeframeSec).ceil());
   final out = <PaperTrade>[];
   var i = times.indexWhere((t) => t >= startTime);
-  if (i < 0) return (out, false);
+  if (i < 0) return (out, null);
   while (i < fs.n) {
     final side = cnd.signalAt(fs, i, definition);
     if (side == null) {
       i++;
       continue;
     }
-    if (i + bars >= fs.n) return (out, true); // signal seen, expiry candle not closed yet
+    if (i + bars >= fs.n) return (out, i); // signal seen, expiry candle not closed yet
     final eBar = i + 1, xBar = i + bars;
     if (times[xBar] - times[i] != bars * timeframeSec) {
       i++; // the market closed inside this trade: void, not counted
@@ -59,8 +60,32 @@ class PaperTrade {
         fs.marketCondition(i)));
     i = xBar; // one trade at a time, next decision on the expiry candle's close
   }
-  return (out, false);
+  return (out, null);
 }
+
+/// What a background check found: a fresh signal (the user may act on it) or a finished virtual trade.
+class PaperEvent {
+  PaperEvent.signal(this.session, this.strategyId, this.strategyName, this.side, this.durationSec, this.signalTime, this.ageSec)
+      : outcome = null,
+        pnl = null;
+  PaperEvent.result(this.session, this.strategyId, this.strategyName, this.side, this.durationSec, this.signalTime,
+      String this.outcome, double this.pnl)
+      : ageSec = null;
+  final PaperSession session;
+  final int strategyId;
+  final String strategyName;
+  final String side; // BUY | SELL
+  final int durationSec;
+  final int signalTime; // epoch seconds: close of the signal candle (= when the trade would be entered)
+  final int? ageSec; // signal: seconds between that close and the moment it was seen
+  final String? outcome; // result: win | loss | draw
+  final double? pnl;
+  bool get isSignal => outcome == null;
+}
+
+/// A signal is only worth an alert while it can still be acted on: seen within half a candle (+15 s of data delay).
+/// Older ones (e.g. forex prices, which the free source publishes an hour late) are never sent as "act now".
+bool isFreshSignal(int ageSec, int timeframeSec) => ageSec >= 0 && ageSec <= timeframeSec ~/ 2 + 15;
 
 /// Append newer candles, filling short quiet gaps with flat candles.
 void mergeFeed(List<Bar> feed, List<Bar> fresh, int tf) {
@@ -92,7 +117,9 @@ class PaperSession {
     this.lastError,
     this.waiting = 0,
     Map<String, Map<String, dynamic>>? trades,
-  }) : trades = trades ?? {};
+    List<String>? alerted,
+  })  : trades = trades ?? {},
+        alerted = alerted ?? [];
 
   final String id;
   final String asset;
@@ -105,11 +132,12 @@ class PaperSession {
   String? lastError;
   int waiting; // strategies with a trade waiting for its expiry
   final Map<String, Map<String, dynamic>> trades; // key → {strategy_id, name, side, outcome, pnl, time}
+  final List<String> alerted; // signal keys already announced (never twice), newest last
 
   Map<String, dynamic> toJson() => {
         'id': id, 'asset': asset, 'timeframe_sec': timeframeSec, 'payout': payout, 'strategy_ids': strategyIds,
         'started_at': startedAt, 'status': status, 'last_update': lastUpdate, 'last_error': lastError, 'waiting': waiting,
-        'trades': trades,
+        'trades': trades, 'alerted': alerted,
       };
 
   factory PaperSession.fromJson(Map j) => PaperSession(
@@ -123,6 +151,7 @@ class PaperSession {
         lastUpdate: j['last_update'] as String?,
         lastError: j['last_error'] as String?,
         waiting: j['waiting'] as int? ?? 0,
+        alerted: ((j['alerted'] as List?) ?? const []).cast<String>(),
         trades: {for (final e in ((j['trades'] as Map?) ?? const {}).entries) e.key as String: (e.value as Map).cast<String, dynamic>()},
       );
 
@@ -183,6 +212,18 @@ class PaperTrader {
     _save(all);
   }
 
+  /// Save an update without undoing what the screen did meanwhile (the background service shares these files):
+  /// a session stopped meanwhile stays stopped, a deleted one is not brought back. False if it was deleted.
+  bool _putUpdate(PaperSession s) {
+    final all = sessions();
+    final i = all.indexWhere((x) => x.id == s.id);
+    if (i < 0) return false;
+    if (all[i].status == 'stopped') s.status = 'stopped';
+    all[i] = s;
+    _save(all);
+    return true;
+  }
+
   List<Bar> _loadFeed(String id) {
     final f = _feed(id);
     if (!f.existsSync()) return [];
@@ -228,7 +269,7 @@ class PaperTrader {
   }
 
   /// Download the new closed candles and record every virtual trade that finished. Safe to call any time.
-  Future<PaperSession> update(EngineApi api, PaperSession s) async {
+  Future<PaperSession> update(EngineApi api, PaperSession s, {void Function(PaperEvent e)? onEvent}) async {
     final asset = marketAssets.firstWhere((a) => a.symbol == s.asset);
     final client = _client();
     try {
@@ -256,7 +297,19 @@ class PaperTrader {
           final def = strat['definition'] as Map?;
           if (def == null) continue;
           final (trades, pending) = forwardTrades(fs, times, def, s.timeframeSec, s.startedAt);
-          if (pending) s.waiting++;
+          final duration = (def['duration_sec'] as num).toInt();
+          final name = strat['name'] as String? ?? '#$sid';
+          if (pending != null) {
+            s.waiting++;
+            final signalTime = times[pending] + s.timeframeSec;
+            final key = '$sid:$signalTime';
+            final age = now.millisecondsSinceEpoch ~/ 1000 - signalTime;
+            if (!s.alerted.contains(key) && isFreshSignal(age, s.timeframeSec)) {
+              s.alerted.add(key);
+              if (s.alerted.length > 200) s.alerted.removeRange(0, s.alerted.length - 200);
+              onEvent?.call(PaperEvent.signal(s, sid, name, cnd.signalAt(fs, pending, def)!, duration, signalTime, age));
+            }
+          }
           for (final t in trades) {
             final key = '$sid:${t.signalTime}';
             if (s.trades.containsKey(key)) continue;
@@ -268,7 +321,9 @@ class PaperTrader {
               'notes': 'paper-auto · ${asset.source == 'dukascopy' ? 'Dukascopy' : 'Binance'} · ${t.entry} → ${t.exit}',
             });
             s.trades[key] = {'strategy_id': sid, 'name': strat['name'], 'side': t.side, 'outcome': t.outcome, 'pnl': pnl, 'time': t.signalTime};
-            _put(s); // after every recorded trade: an interruption can never record a trade twice
+            if (!_putUpdate(s)) return s; // deleted meanwhile: record nothing more
+            // after every recorded trade: an interruption can never record a trade twice
+            onEvent?.call(PaperEvent.result(s, sid, name, t.side, duration, t.signalTime, t.outcome, pnl));
           }
         }
       }
@@ -279,17 +334,17 @@ class PaperTrader {
     } finally {
       client.close();
     }
-    _put(s);
+    _putUpdate(s);
     return s;
   }
 
   /// Catch up every running session (called on app start and periodically). Never runs twice at once.
-  Future<void> updateAll(EngineApi api) async {
+  Future<void> updateAll(EngineApi api, {void Function(PaperEvent e)? onEvent}) async {
     if (_busy) return;
     _busy = true;
     try {
       for (final s in sessions().where((x) => x.status == 'running')) {
-        await update(api, s);
+        await update(api, s, onEvent: onEvent);
       }
     } finally {
       _busy = false;

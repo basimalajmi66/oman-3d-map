@@ -161,6 +161,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final p = await _askPassphrase(confirm: false);
     if (p == null || !mounted) return;
     await runWithFeedback(context, () async {
+      await app.stopBackground(); // the service must not keep the old database open
       await app.engine.restoreBackup(f, p);
       await app.refresh();
     }, successKey: 'restored');
@@ -198,6 +199,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (ok != true || !mounted) return;
     await runWithFeedback(context, () async {
+      await app.stopBackground();
       await app.engine.wipe(includeBackups: includeBackups);
       await app.refresh();
     }, successKey: 'wiped');

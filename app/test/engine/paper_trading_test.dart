@@ -64,7 +64,7 @@ void main() {
       expect(tail[k].outcome, all[k]['outcome']);
     }
     expect(fwd.every((t) => t.signalIndex >= start), isTrue);
-    expect(pending, isA<bool>());
+    expect(pending == null || pending >= start, isTrue);
   });
 
   test('a trade across a market close is void; short quiet gaps are filled with flat candles', () {
@@ -133,6 +133,57 @@ void main() {
       expect(sum['wins'] + sum['losses'] <= sum['trades'], isTrue);
     });
 
+    test('live: a fresh signal is announced once, at the candle close, and becomes the same trade later', () async {
+      final asset = marketAssets.first;
+      var now = DateTime.fromMillisecondsSinceEpoch((t0 + 5) * 1000, isUtc: true);
+      final p = PaperTrader('${dir.path}/live', client: FakeMarket.new, now: () => now);
+      await p.start(api, asset, tf, 0.85, [sid]);
+      final events = <PaperEvent>[];
+      for (var k = 0; k < 240; k++) {
+        now = now.add(const Duration(seconds: tf)); // a check 5 s after every candle close
+        await p.updateAll(api, onEvent: events.add);
+        if (k % 7 == 0) await p.updateAll(api, onEvent: events.add); // an extra check: nothing announced twice
+      }
+      final signals = events.where((e) => e.isSignal).toList();
+      expect(signals.length, greaterThan(10));
+      expect(signals.every((e) => e.ageSec == 5), isTrue);
+      expect({for (final e in signals) e.signalTime}.length, signals.length);
+      final trades = p.sessions().single.trades;
+      final settled = signals.where((e) => e.signalTime + e.durationSec < now.millisecondsSinceEpoch ~/ 1000 - tf);
+      for (final e in settled) {
+        expect(trades['$sid:${e.signalTime}']?['side'], e.side, reason: 'the alert matched the recorded trade');
+      }
+      expect(events.where((e) => !e.isSignal).length, trades.length);
+
+      // catching up late (prices an hour behind) never sends an "act now" alert for old candles
+      final late = <PaperEvent>[];
+      var now2 = DateTime.fromMillisecondsSinceEpoch(t0 * 1000, isUtc: true);
+      final q = PaperTrader('${dir.path}/late', client: _HourLate.new, now: () => now2);
+      await q.start(api, asset, tf, 0.85, [sid]);
+      now2 = now2.add(const Duration(hours: 3)); // the source only has candles up to an hour ago
+      await q.updateAll(api, onEvent: late.add);
+      expect(late.where((e) => e.isSignal), isEmpty);
+      expect(late.where((e) => !e.isSignal), isNotEmpty);
+      expect(isFreshSignal(30, 30), isTrue);
+      expect(isFreshSignal(31, 30), isFalse);
+      expect(isFreshSignal(165, 300), isTrue);
+    });
+
+    test('an update never undoes a stop or a delete made meanwhile (screen and service share the files)', () async {
+      final asset = marketAssets.first;
+      var now = DateTime.fromMillisecondsSinceEpoch(t0 * 1000, isUtc: true);
+      final p = PaperTrader('${dir.path}/share', client: FakeMarket.new, now: () => now);
+      final s = await p.start(api, asset, tf, 0.85, [sid]);
+      final other = PaperTrader('${dir.path}/share', client: FakeMarket.new, now: () => now); // the other isolate
+      other.stop(s.id);
+      now = now.add(const Duration(hours: 1));
+      await p.update(api, s); // s still says "running"
+      expect(p.sessions().single.status, 'stopped');
+      other.delete(s.id);
+      await p.update(api, s);
+      expect(p.sessions(), isEmpty);
+    });
+
     test('stopping, deleting and data-service errors', () async {
       final asset = marketAssets.first;
       var now = DateTime.fromMillisecondsSinceEpoch(t0 * 1000, isUtc: true);
@@ -150,6 +201,13 @@ void main() {
       await expectLater(p.start(api, asset, tf, 0.85, []), throwsA(isA<MarketDataException>()));
     });
   });
+}
+
+/// Like the free forex source: candles become available about an hour after they close.
+class _HourLate extends FakeMarket {
+  @override
+  Future<List<Bar>> fetchBars(MarketAsset asset, int timeframeSec, DateTime from, DateTime to, {Progress? onProgress}) =>
+      super.fetchBars(asset, timeframeSec, from, to.subtract(const Duration(hours: 1)));
 }
 
 class _Failing extends MarketDataClient {

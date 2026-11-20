@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -14,6 +15,7 @@ import 'core/window_controller.dart';
 import 'data/paper_trading.dart';
 import 'engine/local/local_host.dart';
 import 'platform/android_overlay.dart';
+import 'platform/background_mode.dart';
 import 'platform/share_intake.dart';
 import 'state/app_state.dart';
 import 'ui/home/adaptive_home.dart';
@@ -28,6 +30,7 @@ final messengerKey = GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterForegroundTask.initCommunicationPort();
   await startApp();
 }
 
@@ -100,8 +103,14 @@ Future<void> startApp() async {
       state.dispose();
       await startApp();
     },
-    onSwitchMode: mode == null ? null : () => restartAs(mode == 'local' ? 'remote' : 'local'),
+    onSwitchMode: mode == null ? null : () async {
+      await BackgroundMode.stop(); // the service belongs to the phone engine
+      await restartAs(mode == 'local' ? 'remote' : 'local');
+    },
     paper: PaperTrader('${(await getApplicationSupportDirectory()).path}/paper'),
+    background: mode == 'local' && BackgroundMode.supported
+        ? BackgroundControl(isRunning: () => BackgroundMode.isRunning, start: BackgroundMode.start, stop: BackgroundMode.stop)
+        : null,
   );
   await state.init();
   runApp(UataApp(state: state));

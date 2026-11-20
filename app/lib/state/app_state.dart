@@ -22,6 +22,7 @@ class AppState extends ChangeNotifier {
     this.onUnpair,
     this.onSwitchMode,
     this.paper,
+    this.background,
   }) : overlay = overlay ?? NoOverlay();
 
   /// Set on a phone / tablet: the engine is on this paired computer.
@@ -38,6 +39,12 @@ class AppState extends ChangeNotifier {
   int get chartMaxSide => settings['chart_max_side'] as int? ?? 1280;
   final Future<void> Function()? onSwitchMode;
 
+  /// Background mode (Android, phone-only engine); null where it does not exist (desktop, remote, tests).
+  final BackgroundControl? background;
+
+  /// Stops background mode before the database is replaced or wiped, and on the emergency stop.
+  Future<void> stopBackground() async => background?.stop();
+
   /// Automatic paper trading (virtual trades on real prices, simulation results only). Null in tests.
   final PaperTrader? paper;
 
@@ -46,6 +53,7 @@ class AppState extends ChangeNotifier {
   Future<void> paperTick() async {
     final p = paper;
     if (p == null || status['halted'] == true || settings['external_data_sources_allowed'] != true) return;
+    if (await background?.isRunning() ?? false) return; // the background service is doing it (never both at once)
     await p.updateAll(engine);
   }
 
@@ -210,6 +218,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> emergencyStop() async {
+    await stopBackground();
     status = (await _guard(engine.emergencyStop))!;
     settings = await engine.getSettings();
     await _pushOverlay();
@@ -233,6 +242,14 @@ class AppState extends ChangeNotifier {
     _timer?.cancel();
     super.dispose();
   }
+}
+
+/// Background mode as the UI sees it (implemented by the Android service; faked in tests).
+class BackgroundControl {
+  BackgroundControl({required this.isRunning, required this.start, required this.stop});
+  final Future<bool> Function() isRunning;
+  final Future<String?> Function(String lang) start; // error key or null
+  final Future<void> Function() stop;
 }
 
 /// Exposes [AppState] to the widget tree and rebuilds dependents on change.
