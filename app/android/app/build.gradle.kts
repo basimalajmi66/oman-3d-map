@@ -31,11 +31,24 @@ android {
         versionName = flutter.versionName
     }
 
+    // One fixed key for every build (CI runners otherwise make a new debug key each time, and Android then refuses
+    // to install a new version over the old one). It only lets a build replace an earlier UATA build; it protects
+    // no secret (the app stores no passwords).
+    signingConfigs {
+        create("uata") {
+            storeFile = file("uata-update.jks")
+            storePassword = "uata-sideload"
+            keyAlias = "uata"
+            keyPassword = "uata-sideload"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("uata")
+        }
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("uata")
         }
     }
 }

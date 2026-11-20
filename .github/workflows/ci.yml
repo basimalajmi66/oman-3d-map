@@ -75,6 +75,11 @@ jobs:
       - name: Build APK (companion)
         run: flutter build apk --debug --build-number ${{ github.run_number }} --dart-define=UATA_BUILD=${{ github.run_number }}
         working-directory: app
+      - name: Same signing key as every earlier build (so a new version installs over the old one)
+        run: |
+          signer=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$signer" verify --print-certs app/build/app/outputs/flutter-apk/app-debug.apk | tee certs.txt
+          grep -qi "SHA-256 digest: 2be063a6a4934da24ebd90843b0990579d7089ec365fb037a1b471de43210a0c" certs.txt
       - uses: actions/upload-artifact@v4
         with:
           name: uata-android-debug
