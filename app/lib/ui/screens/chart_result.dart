@@ -6,6 +6,7 @@ import '../../core/engine_api.dart';
 import '../../l10n/strings.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
+import 'quick_start_screen.dart';
 import 'signal_details.dart' show decisionSteps, strategyEvidence;
 
 /// Result of reading one chart image: the recommendation (WAIT until the signal
@@ -37,6 +38,20 @@ Future<void> showChartResult(BuildContext context, Json result) {
             ),
             const SizedBox(height: 8),
             if (reason != null) Text(app.t('reason_$reason'), key: const Key('chart_result_reason')),
+            if (reason == 'no_approved_strategy')
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: FilledButton.tonalIcon(
+                  key: const Key('chart_result_get_strategy'),
+                  onPressed: () {
+                    final nav = Navigator.of(ctx);
+                    nav.pop();
+                    nav.push(MaterialPageRoute<void>(builder: (_) => AppScope(state: app, child: const QuickStartScreen())));
+                  },
+                  icon: const Icon(Icons.rocket_launch_outlined),
+                  label: Text(app.t('get_tested_strategy')),
+                ),
+              ),
             if (analysis['repeated'] == true)
               Text(app.t('repeated_note'), key: const Key('repeated_note'), style: const TextStyle(fontSize: 11)),
             if (sig != 'WAIT' && analysis['duration_sec'] != null)

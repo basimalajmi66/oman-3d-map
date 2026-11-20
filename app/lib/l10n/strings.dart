@@ -452,6 +452,7 @@ const Map<String, Map<String, String>> _strings = {
   'approval_refused': {'ar': 'لا يمكن الاعتماد', 'en': 'Approval refused'},
   // phase 8: decision engine
   'reason_strategy_signal': {'ar': 'استراتيجية معتمدة تحققت شروطها مع توافق كافٍ للعوامل', 'en': 'An approved strategy fired with enough confluence'},
+  'get_tested_strategy': {'ar': 'اختبار واعتماد استراتيجية (البدء السريع)', 'en': 'Test and approve a strategy (quick start)'},
   'reason_no_approved_strategy': {
     'ar': 'لا توجد استراتيجية معتمدة ومختبرة على هذا الإطار الزمني — لا إشارة. اعتمد استراتيجية من شاشة التدريب.',
     'en': 'No approved strategy tested on this timeframe — no signal. Approve one in Training.'
