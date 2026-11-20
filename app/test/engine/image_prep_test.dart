@@ -27,6 +27,21 @@ void main() {
     expect(im.decodeImage(await bytesOf(await prepareChartImage(mem('p.png', tall), 1280)))!.height, 1280);
   });
 
+  test('crop: the chosen area only (exact pixels), then the usual shrinking', () async {
+    final src = im.Image(width: 400, height: 200)..clear(im.ColorRgb8(0, 0, 0));
+    im.fillRect(src, x1: 100, y1: 50, x2: 299, y2: 149, color: im.ColorRgb8(200, 10, 10)); // the "chart"
+    final out = await prepareChartImage(mem('c.jpg', im.encodePng(src)), 0, crop: (0.25, 0.25, 0.75, 0.75));
+    expect(out.name, 'c.png');
+    final d = im.decodeImage(await bytesOf(out))!;
+    expect([d.width, d.height], [200, 100]);
+    expect([d.getPixel(0, 0).r, d.getPixel(199, 99).r], [200, 200]); // nothing of the black border left
+    final big = im.Image(width: 3000, height: 1000);
+    final both = im.decodeImage(await bytesOf(await prepareChartImage(mem('b.png', im.encodePng(big)), 1280, crop: (0.0, 0.0, 0.5, 1.0))))!;
+    expect([both.width, both.height], [1280, 853]); // 1500×1000 cropped, then shrunk
+    expect(cropRect((0.0, 0.0, 1.0, 1.0), 10, 10), (0, 0, 10, 10));
+    expect(cropRect((0.99, 0.99, 0.99, 0.99), 10, 10), (9, 9, 1, 1)); // never empty
+  });
+
   test('small images, "original size" and non-images are left alone', () async {
     final small = im.encodePng(im.Image(width: 800, height: 450));
     final kept = await prepareChartImage(mem('s.png', small), 1280);

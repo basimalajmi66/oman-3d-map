@@ -57,8 +57,8 @@ class ShareIntake {
       this.libraryAvailable = true,
       this.prepareImage});
 
-  /// Shrinks shared chart images before analysis (Settings.chart_max_side).
-  Future<UploadFile> Function(UploadFile)? prepareImage;
+  /// Crops (crop screen) and shrinks shared chart images before analysis; null = the user cancelled.
+  Future<UploadFile?> Function(UploadFile)? prepareImage;
 
   /// False on the phone engine (no knowledge library yet): documents are reported as unsupported.
   bool libraryAvailable;
@@ -93,8 +93,10 @@ class ShareIntake {
       try {
         final upload = UploadFile(name: item.name, length: await file.length(), openRead: file.openRead);
         if (item.isImage) {
+          final prepared = prepareImage == null ? upload : await prepareImage!(upload);
+          if (prepared == null) continue; // cancelled on the crop screen
           out.add(ShareOutcome(item, ShareOutcomeKind.chartAnalysed,
-              result: await engine.submitChartImage(await (prepareImage?.call(upload) ?? Future.value(upload)), inputMode: 'share')));
+              result: await engine.submitChartImage(prepared, inputMode: 'share')));
         } else {
           out.add(ShareOutcome(item, ShareOutcomeKind.addedToLibrary, result: await engine.uploadFile(upload)));
         }

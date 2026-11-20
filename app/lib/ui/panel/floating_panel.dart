@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/engine_api.dart';
+import '../../core/image_prep.dart';
 import '../../state/app_state.dart';
 import '../screens/chart_result.dart';
 import '../screens/knowledge_screen.dart';
@@ -41,10 +42,18 @@ class FloatingPanel extends StatelessWidget {
 
   Future<void> _analyzeImage(BuildContext context) async {
     final app = AppScope.read(context);
-    final img = await pickImage();
+    var img = await pickImage();
     if (img == null || !context.mounted) return;
+    CropFrac? crop;
+    if (app.askCrop case final ask?) {
+      final d = await ask(img);
+      if (d == null || !context.mounted) return; // cancelled
+      img = d.image;
+      crop = d.crop;
+    }
+    final chosen = img;
     Json? result;
-    final ok = await runWithFeedback(context, () async => result = await app.analyzeChart(img));
+    final ok = await runWithFeedback(context, () async => result = await app.analyzeChart(chosen, crop: crop));
     if (ok && result != null && context.mounted) await showChartResult(context, result!);
   }
 

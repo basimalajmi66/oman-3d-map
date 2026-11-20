@@ -192,6 +192,11 @@ const Map<String, Map<String, String>> _strings = {
   'error': {'ar': 'خطأ', 'en': 'Error'},
   'trading_mode': {'ar': 'أسلوب التداول: يدوي (ثابت)', 'en': 'Trading mode: manual (fixed)'},
   // phase 2: chart images, share sheet, Android overlay, tablet
+  'crop_title': {'ar': 'قص الصورة على الشارت', 'en': 'Crop to the chart'},
+  'crop_hint': {'ar': 'اسحب الزوايا ليحيط الإطار بالشموع فقط — بدون الأزرار والقوائم واللوحات. يُحفظ الإطار للمرة القادمة.', 'en': 'Drag the corners so the frame holds only the candles — no buttons, menus or panels. The frame is kept for next time.'},
+  'crop_analyze': {'ar': 'تحليل المنطقة', 'en': 'Analyze area'},
+  'crop_full': {'ar': 'الصورة كاملة', 'en': 'Whole image'},
+  'crop_reset': {'ar': 'إعادة', 'en': 'Reset'},
   'analyze_image': {'ar': 'تحليل صورة شارت', 'en': 'Analyze chart image'},
   'chart_result': {'ar': 'نتيجة تحليل الصورة', 'en': 'Chart image result'},
   'image_size': {'ar': 'أبعاد الصورة', 'en': 'Image size'},

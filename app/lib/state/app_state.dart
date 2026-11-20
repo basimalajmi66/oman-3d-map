@@ -23,6 +23,7 @@ class AppState extends ChangeNotifier {
     this.onSwitchMode,
     this.paper,
     this.background,
+    this.askCrop,
   }) : overlay = overlay ?? NoOverlay();
 
   /// Set on a phone / tablet: the engine is on this paired computer.
@@ -38,6 +39,9 @@ class AppState extends ChangeNotifier {
   /// Longest side chart images are shrunk to before analysis (0 = original); engines without the setting: 1280.
   int get chartMaxSide => settings['chart_max_side'] as int? ?? 1280;
   final Future<void> Function()? onSwitchMode;
+
+  /// Shows the crop screen for a chart image (null in tests: images are analysed whole).
+  final Future<CropDecision?> Function(UploadFile image)? askCrop;
 
   /// Background mode (Android, phone-only engine); null where it does not exist (desktop, remote, tests).
   final BackgroundControl? background;
@@ -159,9 +163,9 @@ class AppState extends ChangeNotifier {
   }
 
   /// Submit a chart image for analysis (upload, share or screenshot).
-  Future<Json> analyzeChart(UploadFile image, {String inputMode = 'upload'}) async {
+  Future<Json> analyzeChart(UploadFile image, {String inputMode = 'upload', CropFrac? crop}) async {
     final r = (await _guard(() async =>
-        engine.submitChartImage(await prepareChartImage(image, chartMaxSide), inputMode: inputMode)))!;
+        engine.submitChartImage(await prepareChartImage(image, chartMaxSide, crop: crop), inputMode: inputMode)))!;
     lastChartResult = r;
     notifyListeners();
     return r;
@@ -242,6 +246,13 @@ class AppState extends ChangeNotifier {
     _timer?.cancel();
     super.dispose();
   }
+}
+
+/// What the user chose on the crop screen: the image (read once) and the crop (null = the whole image).
+class CropDecision {
+  CropDecision(this.image, this.crop);
+  final UploadFile image;
+  final CropFrac? crop;
 }
 
 /// Background mode as the UI sees it (implemented by the Android service; faked in tests).

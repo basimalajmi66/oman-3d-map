@@ -21,11 +21,20 @@ import 'state/app_state.dart';
 import 'ui/home/adaptive_home.dart';
 import 'ui/overlay/overlay_app.dart';
 import 'ui/screens/chart_result.dart';
+import 'ui/screens/crop_screen.dart';
 import 'ui/screens/mode_choice_screen.dart';
 import 'ui/screens/pairing_screen.dart';
 import 'ui/theme.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
+
+/// A shared chart image: crop screen first, then the usual shrinking. Null = cancelled.
+Future<UploadFile?> _cropAndPrepare(AppState state, UploadFile f) async {
+  final ask = state.askCrop;
+  final d = ask == null ? CropDecision(f, null) : await ask(f);
+  if (d == null) return null;
+  return prepareChartImage(d.image, state.chartMaxSide, crop: d.crop);
+}
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
@@ -108,6 +117,11 @@ Future<void> startApp() async {
       await restartAs(mode == 'local' ? 'remote' : 'local');
     },
     paper: PaperTrader('${(await getApplicationSupportDirectory()).path}/paper'),
+    askCrop: (f) async {
+      final ctx = navigatorKey.currentContext;
+      if (ctx == null || !ctx.mounted) return CropDecision(f, null); // no screen yet (share at start): whole image
+      return askChartCrop(ctx, state, f);
+    },
     background: mode == 'local' && BackgroundMode.supported
         ? BackgroundControl(isRunning: () => BackgroundMode.isRunning, start: BackgroundMode.start, stop: BackgroundMode.stop)
         : null,
@@ -125,14 +139,14 @@ Future<void> startApp() async {
       share
         ..engine = engine
         ..libraryAvailable = library
-        ..prepareImage = ((f) => prepareChartImage(f, state.chartMaxSide))
+        ..prepareImage = ((f) => _cropAndPrepare(state, f))
         ..onOutcomes = (o) => _reportShares(state, o);
     } else {
       _share = ShareIntake(
           engine: engine,
           source: ReceiveSharingIntentSource(),
           libraryAvailable: library,
-          prepareImage: (f) => prepareChartImage(f, state.chartMaxSide),
+          prepareImage: (f) => _cropAndPrepare(state, f),
           onOutcomes: (o) => _reportShares(state, o));
       await _share!.start();
     }
