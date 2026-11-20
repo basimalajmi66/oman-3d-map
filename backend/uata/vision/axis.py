@@ -95,12 +95,21 @@ def _labels(crop: np.ndarray, scale: int = 3) -> list[tuple[float, float, int]]:
                                      output_type=pytesseract.Output.DICT)
     out = []
     for text, top, height, conf in zip(data["text"], data["top"], data["height"], data["conf"]):
-        t = text.strip().replace(",", ".")
+        t = thousands_aware(text.strip())
         if not t or not NUM_RE.match(t) or float(conf) < 30:
             continue
         dec = len(t.split(".")[1]) if "." in t else 0
         out.append(((top + height / 2) / scale, float(t), dec))
     return out
+
+
+def thousands_aware(t: str) -> str:
+    """'3,568.000' and '12,500,000' use ',' for thousands; '1,0915' uses it as the decimal point."""
+    if "," in t and "." in t:
+        return t.replace(",", "")
+    if re.fullmatch(r"-?\d{1,3}(,\d{3}){2,}", t):
+        return t.replace(",", "")
+    return t.replace(",", ".")
 
 
 def _fit(points: list[tuple[float, float, int]]) -> tuple[float, float, float] | None:

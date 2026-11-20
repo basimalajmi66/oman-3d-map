@@ -70,6 +70,19 @@ def main() -> None:
                 from uata.vision.reader import limit_candles
                 reading = limit_candles(reading, case["limit"])
             out.append(reading)
+    elif op == "render_axis":
+        # synthetic charts with known prices: the true y → price line, and the computer's own OCR reading
+        import cv2
+        from uata.vision.reader import ChartReader
+        from uata.vision.synthetic import random_walk_ohlc, render_chart
+        out = []
+        for case in req["cases"]:
+            ch = render_chart(random_walk_ohlc(case.get("n", 60), seed=case.get("seed", 0)), **case.get("render", {}))
+            cv2.imwrite(case["path"], ch.image)
+            a, b = ch.price_to_y
+            pc = ChartReader().read(cv2.imread(case["path"])).to_dict()
+            out.append({"slope": 1 / a, "intercept": -b / a, "ohlc": [list(map(float, c)) for c in ch.ohlc],
+                        "computer_scale": pc["price_scale"], "computer_tf": pc["timeframe_sec"]})
     elif op == "backup_make":
         # a computer-side backup with known content, for the phone to restore
         from uata.api.app import build_services

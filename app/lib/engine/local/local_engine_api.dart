@@ -12,6 +12,7 @@ import 'dart:typed_data';
 
 import '../../core/engine_api.dart';
 import '../knowledge/extract.dart' as kx;
+import '../vision/axis.dart' show LineOcr;
 import 'backup.dart';
 import 'chart_inputs.dart';
 import 'db.dart';
@@ -20,7 +21,7 @@ import 'services.dart';
 import 'settings.dart';
 
 class LocalEngine {
-  LocalEngine._(this.root, this.db, this.schema) {
+  LocalEngine._(this.root, this.db, this.schema, [this.ocr]) {
     settings = SettingsStore(db);
     control = ControlService(db);
     records = RecordsService(db);
@@ -28,10 +29,13 @@ class LocalEngine {
     signals = SignalService(records, strategies, settings);
     stats = StatsService(db);
     knowledge = KnowledgeService(db, filesDir);
-    charts = ChartInputService(db, filesDir, signals, knowledge: knowledge);
+    charts = ChartInputService(db, filesDir, signals, knowledge: knowledge, ocr: ocr);
   }
 
   final String root;
+
+  /// On-device OCR for price-axis labels (Tesseract on Android); null in tests / where unavailable.
+  final LineOcr? ocr;
   final LocalDb db;
   final SchemaLoader schema;
   late final SettingsStore settings;
@@ -119,7 +123,7 @@ class LocalEngine {
   }
 
   /// Open (or create) the on-device engine in `root`. A corrupt database is kept aside, never overwritten.
-  static Future<LocalEngine> open(String root, SchemaLoader schema) async {
+  static Future<LocalEngine> open(String root, SchemaLoader schema, {LineOcr? ocr}) async {
     Directory('$root/files').createSync(recursive: true);
     final path = '$root/uata.sqlite3';
     final notices = <Map<String, dynamic>>[];
@@ -143,7 +147,7 @@ class LocalEngine {
         notices.add({'code': 'database_was_corrupt', 'kept_as': kept.split('/').last, 'advice': 'restore your latest backup'});
       }
     }
-    final e = LocalEngine._(root, await LocalDb.open(path, schema), schema);
+    final e = LocalEngine._(root, await LocalDb.open(path, schema), schema, ocr);
     e.notices.addAll(notices);
     return e;
   }
@@ -199,7 +203,7 @@ class LocalEngineApi implements EngineApi {
   Future<List<Json>> notices() async => [...engine.notices];
   @override
   Future<Json> capabilities() async => {
-        'engine': 'phone', 'ocr': false, 'ocr_languages': <String>[], 'speech_to_text': false, 'ffmpeg': false,
+        'engine': 'phone', 'ocr': engine.ocr != null, 'ocr_languages': <String>[], 'speech_to_text': false, 'ffmpeg': false,
         'screen_capture': false, 'knowledge': true, 'videos': false, 'backups': true, 'companion': false,
       };
 

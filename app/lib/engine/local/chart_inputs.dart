@@ -5,6 +5,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -12,6 +13,7 @@ import 'package:image/image.dart' as im;
 
 import '../../core/engine_api.dart';
 import '../analysis/analyzer.dart';
+import '../vision/axis.dart';
 import '../vision/imgops.dart';
 import '../vision/reader.dart';
 import 'db.dart';
@@ -29,7 +31,8 @@ RgbImage rgbOf(im.Image d) {
 }
 
 /// Runs in a background isolate: decode → PNG → read → technical analysis.
-Future<Map<String, dynamic>> _process(Uint8List data, double minQuality, Map<String, bool> enabled, int maxCandles) async {
+Future<Map<String, dynamic>> _process(Uint8List data, double minQuality, Map<String, bool> enabled, int maxCandles,
+    bool withAxis) async {
   final decoded = im.decodeImage(data);
   if (decoded == null) return {'error': 'file is not a readable image'};
   if (decoded.width < minSide || decoded.height < minSide) {
@@ -37,13 +40,22 @@ Future<Map<String, dynamic>> _process(Uint8List data, double minQuality, Map<Str
   }
   final rgb = rgbOf(decoded);
   final png = im.encodePng(im.Image.fromBytes(width: rgb.width, height: rgb.height, bytes: rgb.rgb.buffer, numChannels: 3));
-  final reading = limitCandles(await ChartReader(minQuality: minQuality).read(rgb), maxCandles);
+  final full = await ChartReader(minQuality: minQuality).read(rgb);
+  final cds = (full['candles'] as List).cast<Map>();
+  // the axis label lines are cut here (pure Dart); the OCR itself runs afterwards on the main isolate
+  final job = withAxis && cds.isNotEmpty
+      ? prepareAxisJob(rgb, cds.map((c) => c['left'] as int).reduce(math.min), cds.map((c) => c['right'] as int).reduce(math.max))
+      : null;
+  final reading = limitCandles(full, maxCandles);
   reading['technical'] = analyzeReading(reading, enabled: enabled);
-  return {'reading': reading, 'png': png, 'width': rgb.width, 'height': rgb.height};
+  return {'reading': reading, 'png': png, 'width': rgb.width, 'height': rgb.height, 'axis': job};
 }
 
 class ChartInputService {
-  ChartInputService(this.db, this.filesDir, this.signals, {this.knowledge});
+  ChartInputService(this.db, this.filesDir, this.signals, {this.knowledge, this.ocr});
+
+  /// On-device OCR of single text lines (Tesseract on the phone); null = relative units only.
+  final LineOcr? ocr;
   final LocalDb db;
   final String filesDir;
   final SignalService signals;
@@ -69,10 +81,15 @@ class ChartInputService {
     if (data.isEmpty) throw EngineException(422, 'empty file');
     if (data.length > maxImageBytes) throw EngineException(422, 'image too large (max 25 MB)');
     final maxCandles = signals.settings.get()['chart_max_candles'] as int;
-    final r = await Isolate.run(() => _process(data, minQuality, enabled, maxCandles));
+    final withAxis = ocr != null;
+    final r = await Isolate.run(() => _process(data, minQuality, enabled, maxCandles, withAxis));
     if (r['error'] != null) throw EngineException(422, r['error'] as String);
     final png = r['png'] as Uint8List;
-    final reading = r['reading'] as Map<String, dynamic>;
+    var reading = r['reading'] as Map<String, dynamic>;
+    if (r['axis'] case final AxisJob job when ocr != null && !job.isEmpty) {
+      final (scale, tfSec, tfLabel, axisDiag) = await runAxisJob(job, ocr!);
+      reading = applyAxis(reading, scale, tfSec, tfLabel, axisDiag);
+    }
     final digest = sha256.convert(png).toString();
     final rel = 'inputs/${digest.substring(0, 2)}/$digest.png';
     final dest = File('$filesDir/$rel');
