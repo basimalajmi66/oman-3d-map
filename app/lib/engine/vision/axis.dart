@@ -41,7 +41,7 @@ class AxisJob {
 }
 
 /// Grey (OpenCV weights) → ×scale cubic → dark text on white → Otsu, like `_prep` on the computer.
-Uint8List prepLine(RgbImage img, int x0, int y0, int x1, int y1, {int scale = 3}) {
+Uint8List prepLine(RgbImage img, int x0, int y0, int x1, int y1, {double scale = 3}) {
   final w = x1 - x0, h = y1 - y0;
   final grey = im.Image(width: w, height: h, numChannels: 1);
   var sum = 0;
@@ -53,7 +53,9 @@ Uint8List prepLine(RgbImage img, int x0, int y0, int x1, int y1, {int scale = 3}
       sum += g;
     }
   }
-  final big = im.copyResize(grey, width: w * scale, height: h * scale, interpolation: im.Interpolation.cubic);
+  final big = im.copyResize(grey,
+      width: math.max(1, (w * scale).round()), height: math.max(1, (h * scale).round()),
+      interpolation: scale >= 1 ? im.Interpolation.cubic : im.Interpolation.average);
   final invert = sum / (w * h) < 128; // dark theme: make the text dark on light
   final hist = List<int>.filled(256, 0);
   for (final p in big) {
@@ -69,6 +71,10 @@ Uint8List prepLine(RgbImage img, int x0, int y0, int x1, int y1, {int scale = 3}
   }
   return im.encodePng(out);
 }
+
+/// Tesseract reads digits best around 36 px tall: too large reads 5 as 9 (measured on real screenshots), too small
+/// loses strokes. Scale factor for a text line `height` px tall.
+double lineScale(int height) => (36 / math.max(1, height)).clamp(0.5, 4.0);
 
 /// Otsu threshold of a 256-bin histogram.
 int otsu(List<int> hist) {
@@ -277,11 +283,11 @@ AxisJob prepareAxisJob(RgbImage img, int plotLeft, int plotRight) {
     sides[side] = [
       for (final (top, bottom, left, right) in pick)
         AxisLine((top + bottom) / 2, prepLine(img, math.max(0, left - 3), math.max(0, top - 3), math.min(w, right + 4),
-            math.min(h, bottom + 4)))
+            math.min(h, bottom + 4), scale: lineScale(bottom - top + 1)))
     ];
   }
   final stripH = math.max(30, h ~/ 8);
-  final top = h >= 10 ? prepLine(img, 0, 0, w, math.min(h, stripH), scale: 2) : null;
+  final top = h >= 10 ? prepLine(img, 0, 0, w, math.min(h, stripH), scale: 2.0) : null;
   return AxisJob(sides, top);
 }
 
@@ -309,6 +315,30 @@ AxisJob prepareAxisJob(RgbImage img, int plotLeft, int plotRight) {
   return (slope, intercept, 1 - ssRes / ssTot);
 }
 
+/// Labels that agree with the best line through any two of them (prices falling upwards). Grossly wrong readings
+/// (a '1' from a button, 3967 for 3567) cannot pull this line; the fit then runs on the agreeing labels.
+List<(double, double, int)> consensus(List<(double, double, int)> pts) {
+  var best = <(double, double, int)>[];
+  var bestErr = double.infinity;
+  for (var i = 0; i < pts.length; i++) {
+    for (var j = i + 1; j < pts.length; j++) {
+      final (y1, v1, d1) = pts[i];
+      final (y2, v2, d2) = pts[j];
+      if ((y2 - y1).abs() < 10 || v1 == v2) continue;
+      final slope = (v2 - v1) / (y2 - y1);
+      if (slope >= 0) continue;
+      final tol = 0.02 * (v2 - v1).abs() + 0.5 * math.pow(10, -math.max(d1, d2));
+      final inl = [for (final p in pts) if ((p.$2 - (v1 + slope * (p.$1 - y1))).abs() <= tol) p];
+      final err = inl.fold<double>(0, (a, p) => a + (p.$2 - (v1 + slope * (p.$1 - y1))).abs());
+      if (inl.length > best.length || (inl.length == best.length && err < bestErr)) {
+        best = inl;
+        bestErr = err;
+      }
+    }
+  }
+  return best.length >= 3 ? best : [...pts];
+}
+
 /// (y, text) labels → a price scale, dropping the worst outlier until the fit is near-perfect (or too few remain).
 /// An OCR'd axis label as a number string: spaces dropped, ',' → '.', and the letter look-alikes a general-purpose
 /// OCR returns for digits (O → 0, l/I/| → 1, S → 5). Anything still not a number is rejected by [numRe].
@@ -334,6 +364,10 @@ PriceScale? scaleFromLabels(List<(double, String)> labels, String side) {
     if (t.isEmpty || !numRe.hasMatch(t)) continue;
     pts.add((y, double.parse(t), t.contains('.') ? t.split('.')[1].length : 0));
   }
+  final agreeing = consensus(pts);
+  pts
+    ..clear()
+    ..addAll(agreeing);
   while (pts.length >= 3) {
     final fit = fitLine(pts);
     if (fit == null) break;

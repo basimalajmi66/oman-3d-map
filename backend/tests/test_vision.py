@@ -148,3 +148,17 @@ def test_plain_charts_keep_the_first_reading():
         ch = render_chart(random_walk_ohlc(80, seed=seed), style="dark_tv", width=1400, height=720)
         r = ChartReader(use_ocr=False).read(ch.image)
         assert "mode" not in r.detection and len(r.candles) == 80
+
+
+@pytest.mark.skipif(not axis.ocr_available(), reason="tesseract not installed")
+@pytest.mark.parametrize("n,tag", [(1, 3567.958), (2, 3567.773), (3, 3567.982)])
+def test_real_pocket_option_screenshots(n, tag):
+    """Real screenshots (indicators, photo background, timer next to the last candle, digits Tesseract misreads
+    when large): candles read and the last price within 0.015 of the platform's own price tag."""
+    from pathlib import Path
+    import cv2
+    path = Path(__file__).resolve().parents[2] / "app" / "test" / "fixtures" / "charts" / f"pocket_option_{n}.png"
+    r = ChartReader().read(cv2.imread(str(path)))
+    assert r.usable and len(r.candles) >= 60
+    assert r.price_scale is not None
+    assert abs(r.candles[-1]["close"] - tag) < 0.015

@@ -112,6 +112,27 @@ def thousands_aware(t: str) -> str:
     return t.replace(",", ".")
 
 
+def consensus(pts: list[tuple[float, float, int]]) -> list[tuple[float, float, int]]:
+    """Labels that agree with the best line through any two of them (prices falling upwards). Grossly wrong
+    readings (a '1' from a button, 3967 for 3567) cannot pull this line; the fit then runs on the agreeing labels."""
+    best: list = []
+    best_err = float("inf")
+    for i in range(len(pts)):
+        for j in range(i + 1, len(pts)):
+            (y1, v1, d1), (y2, v2, d2) = pts[i], pts[j]
+            if abs(y2 - y1) < 10 or v1 == v2:
+                continue
+            slope = (v2 - v1) / (y2 - y1)
+            if slope >= 0:
+                continue
+            tol = 0.02 * abs(v2 - v1) + 0.5 * 10 ** -max(d1, d2)
+            inl = [p for p in pts if abs(p[1] - (v1 + slope * (p[0] - y1))) <= tol]
+            err = sum(abs(p[1] - (v1 + slope * (p[0] - y1))) for p in inl)
+            if len(inl) > len(best) or (len(inl) == len(best) and err < best_err):
+                best, best_err = inl, err
+    return best if len(best) >= 3 else pts
+
+
 def _fit(points: list[tuple[float, float, int]]) -> tuple[float, float, float] | None:
     if len(points) < 3:
         return None
@@ -137,9 +158,10 @@ def read_price_scale(img: np.ndarray, plot_left: int, plot_right: int) -> tuple[
         candidates.append(("right", img[:, plot_right + 3:]))
     if plot_left > 25:
         candidates.append(("left", img[:, :max(1, plot_left - 3)]))
-    for side, crop in candidates:
-        pts = _labels(crop)
-        diag[f"{side}_labels"] = len(pts)
+    for side, crop, scale in [(sd, c, sc) for sd, c in candidates for sc in (3, 2, 1)]:
+        # Tesseract misreads large digits (5 → 9 on real screenshots at ×3): try smaller scales too
+        pts = consensus(_labels(crop, scale))
+        diag[f"{side}_labels"] = max(diag.get(f"{side}_labels", 0), len(pts))
         # iteratively drop the worst outlier until the fit is near-perfect
         while len(pts) >= 3:
             fit = _fit(pts)

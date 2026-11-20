@@ -90,4 +90,18 @@ void main() {
     expect(read, greaterThanOrEqualTo(cases.length - 1), reason: 'the axis should be read on (almost) every chart');
     dir.deleteSync(recursive: true);
   }, skip: paritySkip != false ? paritySkip : (_tesseract ? false : 'tesseract not installed'), timeout: const Timeout(Duration(minutes: 3)));
+
+  test('real Pocket Option screenshots (SuperTrend, photo background, timer next to the last candle): candles and '
+      'prices read, the last price within 0.015 of the price shown by the platform', () async {
+    // platform's own current-price tag on each screenshot
+    const tags = {1: 3567.958, 2: 3567.773, 3: 3567.982};
+    for (final e in tags.entries) {
+      final r = await ChartReader(ocr: LineOcrChartOcr(cliOcr)).read(loadRgb('test/fixtures/charts/pocket_option_${e.key}.png'));
+      expect(r['usable'], isTrue, reason: 'screenshot ${e.key}: ${r['abstain_reasons']}');
+      expect((r['candles'] as List).length, greaterThanOrEqualTo(60), reason: 'screenshot ${e.key}');
+      expect(r['price_scale'], isNotNull, reason: 'screenshot ${e.key}');
+      final last = ((r['candles'] as List).last as Map)['close'] as num;
+      expect((last - e.value).abs(), lessThan(0.015), reason: 'screenshot ${e.key}: $last vs ${e.value}');
+    }
+  }, skip: _tesseract ? false : 'tesseract not installed', timeout: const Timeout(Duration(minutes: 3)));
 }
