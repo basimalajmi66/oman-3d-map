@@ -207,7 +207,203 @@ def detect_candles(img: np.ndarray) -> tuple[list[DetectedCandle], dict]:
             "dropped_label_runs": 0}
     if not raw:
         return [], diag
+    candles, diag = _finish(raw, diag, bull_m, bear_m, min_h, open_h)
+    if diag["dropped_wide"] >= OVERLAY_TRIGGER:
+        # many wide blobs: indicator lines / labels in the candle colours glue candles together (SuperTrend,
+        # signal labels). Read again body-first and keep that reading only when it is clearly more consistent.
+        widths = [c.right - c.left + 1 for c in raw if c.body_resolved]
+        med_w = float(np.median(widths)) if widths else 1.0
+        alt_raw = _bodies_first(bull_m, bear_m, bull_l, bear_l, med_w, spacing, h_img)
+        if alt_raw:
+            alt_diag = dict(diag, raw_components=len(alt_raw), dropped_wide=0, dropped_label_runs=0)
+            alt, alt_diag = _finish(alt_raw, alt_diag, bull_m, bear_m, min_h, open_h)
+            alt_sp = float(np.median(np.diff([c.x for c in alt]))) if len(alt) >= 3 else 0.0
+            if (alt_sp > 0 and len(alt) >= 1.15 * len(candles)
+                    and missing_slots([c.x for c in alt], alt_sp) < missing_slots([c.x for c in candles], alt_sp)):
+                alt_diag["mode"] = "bodies_first"
+                alt_diag["first_pass_candles"] = len(candles)
+                return alt, alt_diag
+    return candles, diag
 
+
+OVERLAY_TRIGGER = 3
+
+
+def _open_rect(mask: np.ndarray, kw: int, kh: int) -> np.ndarray:
+    return cv2.morphologyEx(mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (kw, kh)))
+
+
+def _bodies_first(bull_m, bear_m, bull_l, bear_l, med_w: float, sp: float, h_img: int) -> list[DetectedCandle]:
+    """Candles from their bodies: a k×k opening (k = half a body) erases lines thinner than k in every direction
+    (indicator lines, wicks) and keeps bodies; wicks are then followed up and down from the body centre."""
+    k = max(3, int(med_w * 0.5))
+    opened = []
+    for mask, loose, bullish in ((bull_m, bull_l, True), (bear_m, bear_l, False)):
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(_open_rect(mask, k, k), connectivity=8)
+        opened.append((n, labels, stats, loose, bullish))
+    # the candle spacing, measured on the bodies themselves (the first reading's spacing is unreliable here)
+    centres = sorted(int(st[0]) + int(st[2]) // 2 for n, _, stats, _, _ in opened for st in stats[1:n]
+                     if k <= st[2] <= 2.2 * med_w)
+    if len(centres) >= 5:
+        sp = float(np.median(np.diff(centres)))
+        sp = max(sp, float(k))
+    # label boxes (price tags, BUY/SELL labels, buttons) split by their text would look like narrow bodies: erase
+    # them first. They are the only shapes with horizontal runs longer than two candle slots.
+    opened = []
+    for mask, loose, bullish in ((bull_m, bull_l, True), (bear_m, bear_l, False)):
+        boxes = _label_boxes(mask, sp)
+        if boxes:
+            mask, loose = mask.copy(), loose.copy()
+            for x, y, w, h in boxes:
+                mask[y:y + h, x:x + w] = 0
+                loose[y:y + h, x:x + w] = 0
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(_open_rect(mask, k, k), connectivity=8)
+        opened.append((n, labels, stats, loose, bullish))
+    out: list[DetectedCandle] = []
+    for n, labels, stats, loose, bullish in opened:
+        loose_b = loose > 0
+        bodies = []
+        for i in range(1, n):
+            x, y, w, h, _a = (int(v) for v in stats[i])
+            if k <= w <= 1.3 * sp:
+                bodies.append(_trim_rows(labels[y:y + h, x:x + w] == i, x, y))
+            elif w > 1.3 * sp and h >= w:
+                # a body with a thick piece of line still attached (or two bodies joined by one): taller than wide,
+                # unlike labels and buttons. Keep the body columns (at least half the tallest column).
+                m = labels[y:y + h, x:x + w] == i
+                cols = m.sum(axis=0)
+                strong = cols >= 0.5 * cols.max()
+                j = 0
+                while j < w:
+                    if not strong[j]:
+                        j += 1
+                        continue
+                    e = j
+                    while e + 1 < w and strong[e + 1]:
+                        e += 1
+                    if k <= e - j + 1 <= 1.3 * sp:
+                        bodies.append(_trim_rows(m[:, j:e + 1], x + j, y))
+                    j = e + 1
+            # else: labels, buttons, price tags — wider than a candle slot
+        for x, y, w, h in bodies:
+            cx = x + w // 2
+            y_high = _extend(loose_b, cx, y, -1)
+            y_low = _extend(loose_b, cx, y + h - 1, +1)
+            y_open, y_close = (y + h - 1, y) if bullish else (y, y + h - 1)
+            out.append(DetectedCandle(cx, x, x + w - 1, y_high, y_low, y_open, y_close, bullish, True))
+    out.sort(key=lambda c: c.x)
+    # far from its neighbours vertically = not part of the price path (avatars, icons, buttons in candle colours)
+    keep = []
+    for i, c in enumerate(out):
+        nb = [(o.y_high + o.y_low) / 2 for o in out[max(0, i - 4):i] + out[i + 1:i + 5]]
+        if nb and abs((c.y_high + c.y_low) / 2 - float(np.median(nb))) > 0.2 * h_img:
+            continue
+        keep.append(c)
+    # two bodies inside one candle slot: a thick piece of an indicator line next to a candle → keep the taller
+    grid: list[DetectedCandle] = []
+    for c in keep:
+        if grid and c.x - grid[-1].x < 0.6 * sp:
+            if c.y_low - c.y_high > grid[-1].y_low - grid[-1].y_high:
+                grid[-1] = c
+            continue
+        grid.append(c)
+    # stray shapes far beyond either end of the candle row (icons, buttons)
+    while len(grid) >= 5 and grid[-1].x - grid[-2].x > 5 * sp:
+        grid.pop()
+    while len(grid) >= 5 and grid[1].x - grid[0].x > 5 * sp:
+        grid.pop(0)
+    if len(grid) < 5:
+        return grid
+    # flat candles (body shorter than k) were erased with the lines: look for a k-wide, >= 2 px tall body in each
+    # empty grid slot (flat line pieces span several slots, so they are too wide to be taken)
+    flats = []
+    for mask, loose, bullish in ((bull_m, bull_l, True), (bear_m, bear_l, False)):
+        n, _, stats, _ = cv2.connectedComponentsWithStats(_open_rect(mask, k, 2), connectivity=8)
+        for i in range(1, n):
+            x, y, w, h, _a = (int(v) for v in stats[i])
+            if k <= w <= 1.3 * sp and h < k:
+                flats.append((x, y, w, h, bullish, loose > 0))
+    filled: list[DetectedCandle] = []
+    for a, b in zip(grid, grid[1:]):
+        filled.append(a)
+        gap = b.x - a.x
+        slots = int(gap / sp + 0.5) - 1
+        if gap <= 1.5 * sp or slots < 1:
+            continue
+        lo_y = min(a.y_high, b.y_high) - 3 * sp
+        hi_y = max(a.y_low, b.y_low) + 3 * sp
+        for j in range(1, slots + 1):
+            want = a.x + gap * j / (slots + 1)
+            best = None
+            for f in flats:
+                fx = f[0] + f[2] // 2
+                if abs(fx - want) <= 0.35 * sp and lo_y <= f[1] and f[1] + f[3] <= hi_y:
+                    if best is None or abs(fx - want) < abs(best[0] + best[2] // 2 - want):
+                        best = f
+            if best is not None:
+                x, y, w, h, bullish, loose_b = best
+                cx = x + w // 2
+                y_open, y_close = (y + h - 1, y) if bullish else (y, y + h - 1)
+                filled.append(DetectedCandle(cx, x, x + w - 1, _extend(loose_b, cx, y, -1),
+                                             _extend(loose_b, cx, y + h - 1, +1), y_open, y_close, bullish, True))
+    filled.append(grid[-1])
+    return filled
+
+
+def _label_boxes(mask: np.ndarray, sp: float) -> list[tuple[int, int, int, int]]:
+    """Boxes made of horizontal runs longer than 2 candle slots, grouped across the text rows that break them."""
+    min_run = int(2 * sp) + 1
+    on = mask > 0
+    runs = np.zeros_like(mask)
+    for yy in range(on.shape[0]):
+        row = on[yy]
+        if row.sum() < min_run:
+            continue
+        xx = 0
+        n = row.shape[0]
+        while xx < n:
+            if not row[xx]:
+                xx += 1
+                continue
+            e = xx
+            while e + 1 < n and row[e + 1]:
+                e += 1
+            if e - xx + 1 >= min_run:
+                runs[yy, xx:e + 1] = 255
+            xx = e + 1
+    nb, _, stats, _ = cv2.connectedComponentsWithStats(runs, connectivity=8)
+    parts = sorted((int(st[1]), int(st[0]), int(st[2]), int(st[3])) for st in stats[1:nb])  # (y, x, w, h)
+    groups: list[list[int]] = []  # [x0, y0, x1, y1]
+    for y, x, w, h in parts:
+        for g in groups:
+            overlap = min(g[2], x + w - 1) - max(g[0], x) + 1
+            if overlap >= 0.5 * min(g[2] - g[0] + 1, w) and y - g[3] - 1 <= 1.5 * sp:
+                g[0], g[1], g[2], g[3] = min(g[0], x), min(g[1], y), max(g[2], x + w - 1), max(g[3], y + h - 1)
+                break
+        else:
+            groups.append([x, y, x + w - 1, y + h - 1])
+    return [(g[0], g[1], g[2] - g[0] + 1, g[3] - g[1] + 1) for g in groups if g[3] - g[1] + 1 >= 5]
+
+
+def _trim_rows(m: np.ndarray, x: int, y: int) -> tuple[int, int, int, int]:
+    """Body box of a component: only rows at least 80% as wide as the widest row (a line touching the top or bottom
+    of the body adds narrower rows)."""
+    widths = m.sum(axis=1)
+    full = np.nonzero(widths >= 0.8 * widths.max())[0]
+    return x, y + int(full[0]), m.shape[1], int(full[-1]) - int(full[0]) + 1
+
+
+def missing_slots(xs: list[int], sp: float | None = None) -> int:
+    """Empty grid slots between detected candles (the reader's rule), on the given or their own spacing."""
+    if len(xs) < 3:
+        return 0
+    gaps = np.diff(xs)
+    sp = float(np.median(gaps)) if sp is None else sp
+    return int(sum(max(0, int(g / sp + 0.5) - 1) for g in gaps if g > 1.5 * sp))
+
+
+def _finish(raw: list[DetectedCandle], diag: dict, bull_m, bear_m, min_h: int, open_h: int):
+    """Common clean-up of a raw candle list: wide boxes, tiny candles, duplicates, label boxes and fragments."""
     widths = np.array([c.right - c.left + 1 for c in raw if c.body_resolved] or [1])
     med_w = float(np.median(widths))
     candles = []

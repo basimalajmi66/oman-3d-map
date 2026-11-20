@@ -51,7 +51,8 @@ def random_walk_ohlc(n: int, seed: int = 0, start: float = 1.1000, vol: float = 
 
 def render_chart(ohlc, *, style: str = "dark_classic", width: int = 1000, height: int = 560,
                  grid: bool = True, axis_labels: bool = True, ma_overlay: bool = False,
-                 price_tag: bool = True, decimals: int = 5, title: str | None = "EURUSD  30s") -> SyntheticChart:
+                 price_tag: bool = True, decimals: int = 5, title: str | None = "EURUSD  30s",
+                 supertrend: bool = False, signal_labels: bool = False) -> SyntheticChart:
     st = STYLES[style]
     img = np.full((height, width, 3), st["bg"], dtype=np.uint8)
     x0, y0, x1, y1 = 12, 40, width - 110, height - 30
@@ -105,6 +106,30 @@ def render_chart(ohlc, *, style: str = "dark_classic", width: int = 1000, height
         ma = np.convolve(closes, np.ones(5) / 5, mode="valid")
         pts = np.array([(closes_xy[i + 4][0], py(v)) for i, v in enumerate(ma)], dtype=np.int32)
         cv2.polylines(img, [pts], False, (255, 160, 40), 2, cv2.LINE_AA)  # blue-ish MA line
+
+    if supertrend and n >= 6:
+        # a SuperTrend-like line in the candle colours, touching the candles (what platforms such as Pocket Option
+        # draw): below the lows in green while rising, above the highs in red while falling; labels at each flip
+        rng = [c[1] - c[2] for c in ohlc]
+        trend, pts, flips = 1, [], []
+        for i, (o, h, low, c) in enumerate(ohlc):
+            atr = sum(rng[max(0, i - 4):i + 1]) / len(rng[max(0, i - 4):i + 1])
+            new = 1 if c >= (h + low) / 2 + 0.2 * atr else -1 if c <= (h + low) / 2 - 0.2 * atr else trend
+            if new != trend and i:
+                flips.append((i, new))
+            trend = new
+            pts.append((closes_xy[i][0], py(low - 0.3 * atr) if trend > 0 else py(h + 0.3 * atr), trend))
+        for (x_a, y_a, t_a), (x_b, y_b, t_b) in zip(pts, pts[1:]):
+            if t_a == t_b:
+                cv2.line(img, (x_a, y_a), (x_b, y_b), st["bull"] if t_a > 0 else st["bear"], 3, cv2.LINE_AA)
+        if signal_labels:
+            lw = max(30, int(slot * 3))
+            for i, t in flips:
+                x, y = pts[i][0], pts[i][1] + (14 if t > 0 else -14)
+                col = st["bull"] if t > 0 else st["bear"]
+                cv2.rectangle(img, (x - lw // 2, y - 9), (x + lw // 2, y + 9), col, -1)
+                cv2.putText(img, "BUY" if t > 0 else "SELL", (x - lw // 2 + 3, y + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4,
+                            (255, 255, 255), 1, cv2.LINE_AA)
 
     if price_tag:
         last = ohlc[-1]

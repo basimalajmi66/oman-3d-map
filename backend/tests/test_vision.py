@@ -122,3 +122,29 @@ def test_annotate_draws_on_copy():
     rd = ChartReader(use_ocr=False).read(ch.image).to_dict()
     out = annotate(ch.image, rd)
     assert out.shape == ch.image.shape and not np.array_equal(out, ch.image)
+
+
+@pytest.mark.parametrize("style", ["dark_tv", "light_tv", "dark_classic"])
+@pytest.mark.parametrize("seed", [0, 4, 7, 10])
+def test_indicator_lines_and_labels_in_candle_colours(style, seed):
+    """A SuperTrend-like line and BUY/SELL labels in the candle colours touch the candles (Pocket Option style):
+    the reader switches to the body-first reading and still finds the candles, their direction and their body."""
+    ch = render_chart(random_walk_ohlc(80, seed=seed), style=style, supertrend=True, signal_labels=True,
+                      width=1400, height=720)
+    r = ChartReader(use_ocr=False).read(ch.image)
+    assert r.usable, r.abstain_reasons
+    assert r.detection.get("mode") == "bodies_first"
+    xs = [c["x"] for c in r.candles]
+    hits = [t for t in ch.truth if min(abs(t["x"] - x) for x in xs) <= 2]
+    false = [x for x in xs if min(abs(t["x"] - x) for t in ch.truth) > 2]
+    assert len(hits) >= 0.93 * len(ch.truth)
+    assert len(false) <= 0.04 * len(ch.truth)
+    matched = [(c, t) for c in r.candles for t in ch.truth if abs(t["x"] - c["x"]) <= 2]
+    assert sum(c["bullish"] == t["bullish"] for c, t in matched) >= 0.98 * len(matched)
+
+
+def test_plain_charts_keep_the_first_reading():
+    for seed in range(4):
+        ch = render_chart(random_walk_ohlc(80, seed=seed), style="dark_tv", width=1400, height=720)
+        r = ChartReader(use_ocr=False).read(ch.image)
+        assert "mode" not in r.detection and len(r.candles) == 80
