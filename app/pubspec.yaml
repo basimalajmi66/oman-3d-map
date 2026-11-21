@@ -56,6 +56,7 @@ dependencies:
   flutter_foreground_task: ^11.0.3
   flutter_local_notifications: ^23.0.3
   tesseract_ocr: ^0.6.0
+  whisper_ggml: ^2.10.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -77,6 +78,7 @@ flutter:
     - assets/schema/
     - assets/tessdata/
     - assets/tessdata_config.json
+    - assets/whisper/
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

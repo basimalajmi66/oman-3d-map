@@ -152,6 +152,15 @@ class KnowledgeService {
     return getSource(sid);
   }
 
+  /// 409 when the same file is already in the library (checked before slow work such as listening to a video).
+  void checkNotDuplicate(Uint8List data, {String? digest}) {
+    final d0 = digest ?? sha256.convert(data).toString();
+    final existing = db.session((d) => d.select('SELECT id FROM knowledge_sources WHERE sha256=?', [d0]));
+    if (existing.isNotEmpty) {
+      throw EngineException(409, 'file already in library as source ${existing.first['id']}');
+    }
+  }
+
   /// `preExtracted`: chunks (or the extraction error) computed in a background isolate for big files (PDF).
   Map<String, dynamic> addFile(String filename, Uint8List data,
       {String? title, String? category, List<String> tags = const [], (List<kx.Chunk>, String?)? preExtracted}) {
@@ -162,10 +171,7 @@ class KnowledgeService {
     if (data.isEmpty) throw badRequest('empty file');
     if (data.length > maxUploadBytes) throw badRequest('file too large for the phone (max 200 MB) — add it on the computer');
     final digest = sha256.convert(data).toString();
-    final existing = db.session((d) => d.select('SELECT id FROM knowledge_sources WHERE sha256=?', [digest]));
-    if (existing.isNotEmpty) {
-      throw EngineException(409, 'file already in library as source ${existing.first['id']}');
-    }
+    checkNotDuplicate(data, digest: digest);
     final rel = '${digest.substring(0, 2)}/$digest$ext';
     final dest = File('$filesDir/$rel');
     dest.parent.createSync(recursive: true);

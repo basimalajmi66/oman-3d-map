@@ -16,12 +16,16 @@ import '../strategy/datasets.dart' as ds;
 import '../strategy/discovery.dart' as disc;
 import '../strategy/features.dart' show FeatureSet;
 import '../vision/axis.dart' show LineOcr;
+
 import 'backup.dart';
 import 'chart_inputs.dart';
 import 'db.dart';
 import 'knowledge_service.dart';
 import 'services.dart';
 import 'settings.dart';
+
+/// Video file path → timed speech (null: recognition failed).
+typedef SpeechToText = Future<List<kx.Cue>?> Function(String videoPath);
 
 class LocalEngine {
   LocalEngine._(this.root, this.db, this.schema, [this.ocr]) {
@@ -39,6 +43,9 @@ class LocalEngine {
 
   /// On-device OCR for price-axis labels (Tesseract on Android); null in tests / where unavailable.
   final LineOcr? ocr;
+
+  /// On-device speech recognition for videos (Whisper on Android); null where unavailable.
+  SpeechToText? speech;
   final LocalDb db;
   final SchemaLoader schema;
   late final SettingsStore settings;
@@ -206,7 +213,7 @@ class LocalEngineApi implements EngineApi {
   Future<List<Json>> notices() async => [...engine.notices];
   @override
   Future<Json> capabilities() async => {
-        'engine': 'phone', 'ocr': engine.ocr != null, 'ocr_languages': <String>[], 'speech_to_text': false, 'ffmpeg': false,
+        'engine': 'phone', 'ocr': engine.ocr != null, 'speech_to_text_phone': engine.speech != null, 'ocr_languages': <String>[], 'speech_to_text': false, 'ffmpeg': false,
         'screen_capture': false, 'knowledge': true, 'videos': false, 'backups': true, 'companion': false,
       };
 
@@ -287,12 +294,34 @@ class LocalEngineApi implements EngineApi {
   Future<Json> uploadFile(UploadFile file, {String? title, String? category, List<String> tags = const []}) => _run(() async {
         final bytes = await _allBytes(file);
         (List<kx.Chunk>, String?)? pre;
-        if (file.name.toLowerCase().endsWith('.pdf') && bytes.length <= maxUploadBytes) {
+        final lower = file.name.toLowerCase();
+        if (lower.endsWith('.pdf') && bytes.length <= maxUploadBytes) {
           // a book can take seconds to read: never on the UI thread
           pre = await _extractPdfInBackground(bytes);
+        } else if (const ['.mp4', '.mkv', '.mov', '.avi', '.webm'].any(lower.endsWith) && engine.speech != null &&
+            bytes.length <= maxUploadBytes) {
+          engine.knowledge.checkNotDuplicate(bytes); // never listen to a video that is already in the library
+          pre = await _transcribeVideo(bytes, lower.substring(lower.lastIndexOf('.')));
         }
         return engine.knowledge.addFile(file.name, bytes, title: title, category: category, tags: tags, preExtracted: pre);
       });
+  /// Speech of a video → timed pieces (on-device speech recognition; nothing leaves the phone).
+  Future<(List<kx.Chunk>, String?)> _transcribeVideo(Uint8List bytes, String ext) async {
+    final tmp = File('${Directory.systemTemp.path}/uata_video_${DateTime.now().microsecondsSinceEpoch}$ext');
+    try {
+      tmp.writeAsBytesSync(bytes, flush: true);
+      final cues = await engine.speech!(tmp.path);
+      if (cues == null) return (<kx.Chunk>[], 'speech recognition failed for this video');
+      if (cues.isEmpty) return (<kx.Chunk>[], 'no speech found in this video');
+      return (kx.chunksFromCues(cues), null);
+    } finally {
+      try {
+        tmp.deleteSync();
+        File('${tmp.path}.wav').deleteSync();
+      } catch (_) {}
+    }
+  }
+
   @override
   Future<Json> decideItem(int itemId, String decision) => _run(() => engine.knowledge.decideItem(itemId, decision));
   @override

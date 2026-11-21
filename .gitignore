@@ -13,3 +13,4 @@ app/pubspec.lock.bak
 app/**/ephemeral/
 app/.idea/
 *.iml
+app/assets/whisper/*.bin

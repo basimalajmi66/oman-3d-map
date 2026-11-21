@@ -72,6 +72,11 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+      - name: Bundle the offline speech model (whisper.cpp "tiny", multilingual, MIT licence)
+        run: |
+          curl -fL --retry 4 --retry-delay 5 -o app/assets/whisper/ggml-tiny.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
+          test "$(stat -c%s app/assets/whisper/ggml-tiny.bin)" -gt 70000000
       - name: Build APK (companion)
         run: flutter build apk --debug --build-number ${{ github.run_number }} --dart-define=UATA_BUILD=${{ github.run_number }}
         working-directory: app

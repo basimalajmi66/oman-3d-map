@@ -233,6 +233,7 @@ const Map<String, Map<String, String>> _strings = {
   'disc_v_positive_maybe_luck': {'ar': 'رابحة لكن قد تكون صدفة', 'en': 'Positive, may be luck'},
   'disc_v_failed': {'ar': 'فشلت على البيانات الجديدة', 'en': 'Failed on new data'},
   'disc_v_too_few': {'ar': 'صفقات قليلة للحكم', 'en': 'Too few trades'},
+  'video_listening': {'ar': 'يستمع البرنامج إلى الفيديو ويحوّل الكلام إلى نص على الهاتف… قد يستغرق عدة دقائق للفيديو الطويل', 'en': 'Listening to the video and turning speech into text on the phone… a long video can take several minutes'},
   'analyze_image': {'ar': 'تحليل صورة شارت', 'en': 'Analyze chart image'},
   'chart_result': {'ar': 'نتيجة تحليل الصورة', 'en': 'Chart image result'},
   'image_size': {'ar': 'أبعاد الصورة', 'en': 'Image size'},

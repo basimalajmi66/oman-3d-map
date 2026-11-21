@@ -130,6 +130,10 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
   Future<void> _addFile() async {
     final f = await widget.pickFile();
     if (f == null || !mounted) return;
+    final isVideo = RegExp(r'\.(mp4|mkv|mov|avi|webm)$', caseSensitive: false).hasMatch(f.name);
+    if (isVideo && app.capabilities['speech_to_text_phone'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.t('video_listening')), duration: const Duration(seconds: 6)));
+    }
     await runWithFeedback(context, () async {
       try {
         _selected = await app.engine.uploadFile(f);

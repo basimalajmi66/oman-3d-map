@@ -134,6 +134,11 @@ List<Chunk>? subtitleChunks(String text, {int size = chunkChars}) {
   } on FormatException {
     return null;
   }
+  return chunksFromCues(cues, size: size);
+}
+
+/// Timed text (subtitle cues or speech recognised from a video) → pieces of about a minute, located by time.
+List<Chunk> chunksFromCues(List<Cue> cues, {int size = chunkChars}) {
   final out = <Chunk>[];
   var group = <Cue>[];
   for (final c in [...cues, null]) {
