@@ -59,6 +59,10 @@ class LiveMode {
     }
     state.changed();
     await _push();
+    // the floating window's engine needs a moment to start; repeat until it has surely received the live state
+    for (final ms in const [400, 1200, 2500]) {
+      unawaited(Future<void>.delayed(Duration(milliseconds: ms), () => active ? _push() : null));
+    }
     return null;
   }
 
@@ -87,6 +91,8 @@ class LiveMode {
         await stop();
       case 'frame':
         await setFrame();
+      case 'hello':
+        await _push(); // the floating window just started: give it the live state
     }
   }
 

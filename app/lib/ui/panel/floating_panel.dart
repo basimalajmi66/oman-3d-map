@@ -148,7 +148,7 @@ class FloatingPanel extends StatelessWidget {
                             icon: const Icon(Icons.screenshot_monitor_outlined),
                           ),
                         ],
-                        if (app.overlay.supported) ...[
+                        if (app.overlay.supported && app.live == null) ...[ // with live analysis, its button replaces this one
                           const SizedBox(width: 6),
                           IconButton.outlined(
                             key: const Key('btn_overlay'),

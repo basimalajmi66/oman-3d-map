@@ -52,8 +52,10 @@ class _OverlayCardState extends State<OverlayCard> {
   void initState() {
     super.initState();
     _sub = widget.updates.listen((d) {
-      if (d is Map) setState(() => _data = d.cast<String, dynamic>());
+      if (d is Map && !d.containsKey('cmd')) setState(() => _data = d.cast<String, dynamic>());
     });
+    // the window starts in its own engine: ask the app for the current state (a message sent before it was ready is lost)
+    widget.send?.call({'cmd': 'hello'});
   }
 
   @override
@@ -106,7 +108,7 @@ class _OverlayCardState extends State<OverlayCard> {
               style: const TextStyle(color: Colors.white, fontSize: 12),
             ),
             const SizedBox(height: 4),
-            Text(t('state_${_data['state']}'),
+            Text(_data['state'] == null ? '' : t('state_${_data['state']}'),
                 key: const Key('overlay_state'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white70, fontSize: 11)),

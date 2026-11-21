@@ -128,6 +128,14 @@ void main() {
     l2.dispose();
   });
 
+  test('the window asks for the state when it starts ("hello") and gets the live card', () async {
+    await live.start();
+    o.pushed.clear();
+    commands.add({'cmd': 'hello'});
+    await pumpEventQueue();
+    expect(o.pushed.single['live'], true);
+  });
+
   test('the regular status updates never overwrite the live window', () async {
     await live.start();
     final n = o.pushed.length;
@@ -145,7 +153,7 @@ void main() {
     expect(find.textContaining('3567.95'), findsOneWidget);
     await tester.tap(find.byKey(const Key('overlay_analyze')));
     await tester.tap(find.byKey(const Key('overlay_auto')));
-    expect(sent, [{'cmd': 'analyze'}, {'cmd': 'auto', 'on': true}]);
+    expect(sent, [{'cmd': 'hello'}, {'cmd': 'analyze'}, {'cmd': 'auto', 'on': true}]); // hello: ask for the state on start
     updates.add({'live': true, 'hide': true});
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('overlay_analyze')), findsNothing);
@@ -160,7 +168,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('btn_live')));
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3)); // the repeated state pushes to the starting window
     expect(state.liveActive, isTrue);
+    expect(find.byKey(const Key('btn_overlay')), findsNothing); // the live button replaces the old window button
     expect(find.text(tr('ar', 'live_stop')), findsOneWidget);
     await tester.tap(find.byKey(const Key('btn_live')));
     await tester.pumpAndSettle();
