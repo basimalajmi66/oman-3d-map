@@ -29,6 +29,21 @@ bool _breakout(FeatureSet fs, int i, bool up) {
   return false;
 }
 
+bool _cross(List<double> a, List<double> b, int i, bool up) {
+  if (i < 1 || a[i - 1].isNaN || b[i - 1].isNaN || a[i].isNaN || b[i].isNaN) return false;
+  return up ? a[i - 1] <= b[i - 1] && a[i] > b[i] : a[i - 1] >= b[i - 1] && a[i] < b[i];
+}
+
+bool _streak(FeatureSet fs, int i, int n, bool up) {
+  if (i < n - 1) return false;
+  for (var j = i - n + 1; j <= i; j++) {
+    if (up ? !(fs.c[j] > fs.o[j]) : !(fs.c[j] < fs.o[j])) return false;
+  }
+  return true;
+}
+
+const emaPeriods = [5, 9, 13, 21, 50, 200];
+
 class CondSpec {
   const CondSpec(this.params, this.ar, this.en, this.fn);
   final Map<String, dynamic> params;
@@ -72,6 +87,34 @@ final Map<String, CondSpec> catalog = {
       (fs, i, p) => fs.marketCondition(i) == p['condition']),
   'bullish_candle': CondSpec({}, 'شمعة صاعدة', 'bullish candle', (fs, i, p) => fs.c[i] > fs.o[i]),
   'bearish_candle': CondSpec({}, 'شمعة هابطة', 'bearish candle', (fs, i, p) => fs.c[i] < fs.o[i]),
+  'stoch_below': CondSpec({'value': 20}, 'ستوكاستيك أقل من {value}', 'Stochastic below {value}',
+      (fs, i, p) => !fs.stochK[i].isNaN && fs.stochK[i] < _n(p['value'])),
+  'stoch_above': CondSpec({'value': 80}, 'ستوكاستيك أعلى من {value}', 'Stochastic above {value}',
+      (fs, i, p) => !fs.stochK[i].isNaN && fs.stochK[i] > _n(p['value'])),
+  'stoch_cross_up': CondSpec({}, 'تقاطع ستوكاستيك صاعد', 'Stochastic bullish cross',
+      (fs, i, p) => _cross(fs.stochK, fs.stochD, i, true)),
+  'stoch_cross_down': CondSpec({}, 'تقاطع ستوكاستيك هابط', 'Stochastic bearish cross',
+      (fs, i, p) => _cross(fs.stochK, fs.stochD, i, false)),
+  'adx_above': CondSpec({'value': 25}, 'ADX أعلى من {value} (اتجاه قوي)', 'ADX above {value} (strong trend)',
+      (fs, i, p) => !fs.adx[i].isNaN && fs.adx[i] > _n(p['value'])),
+  'adx_below': CondSpec({'value': 20}, 'ADX أقل من {value} (لا اتجاه)', 'ADX below {value} (no trend)',
+      (fs, i, p) => !fs.adx[i].isNaN && fs.adx[i] < _n(p['value'])),
+  'di_bull': CondSpec({}, '+DI فوق -DI', '+DI above -DI', (fs, i, p) => !fs.pdi[i].isNaN && fs.pdi[i] > fs.mdi[i]),
+  'di_bear': CondSpec({}, '-DI فوق +DI', '-DI above +DI', (fs, i, p) => !fs.pdi[i].isNaN && fs.mdi[i] > fs.pdi[i]),
+  'sar_bull': CondSpec({}, 'Parabolic SAR تحت السعر', 'Parabolic SAR below price', (fs, i, p) => fs.sarDir[i] == 1.0),
+  'sar_bear': CondSpec({}, 'Parabolic SAR فوق السعر', 'Parabolic SAR above price', (fs, i, p) => fs.sarDir[i] == -1.0),
+  'sar_flip_up': CondSpec({}, 'انقلاب SAR للأعلى', 'SAR flips up',
+      (fs, i, p) => i > 0 && fs.sarDir[i] == 1.0 && fs.sarDir[i - 1] == -1.0),
+  'sar_flip_down': CondSpec({}, 'انقلاب SAR للأسفل', 'SAR flips down',
+      (fs, i, p) => i > 0 && fs.sarDir[i] == -1.0 && fs.sarDir[i - 1] == 1.0),
+  'ema_cross_up': CondSpec({'fast': 5, 'slow': 13}, 'تقاطع EMA {fast} فوق EMA {slow}', 'EMA {fast} crosses above EMA {slow}',
+      (fs, i, p) => _cross(fs.ema[(p['fast'] as num).toInt()]!, fs.ema[(p['slow'] as num).toInt()]!, i, true)),
+  'ema_cross_down': CondSpec({'fast': 5, 'slow': 13}, 'تقاطع EMA {fast} تحت EMA {slow}', 'EMA {fast} crosses below EMA {slow}',
+      (fs, i, p) => _cross(fs.ema[(p['fast'] as num).toInt()]!, fs.ema[(p['slow'] as num).toInt()]!, i, false)),
+  'candle_streak_up': CondSpec({'n': 3}, '{n} شموع صاعدة متتالية', '{n} bullish candles in a row',
+      (fs, i, p) => _streak(fs, i, (p['n'] as num).toInt(), true)),
+  'candle_streak_down': CondSpec({'n': 3}, '{n} شموع هابطة متتالية', '{n} bearish candles in a row',
+      (fs, i, p) => _streak(fs, i, (p['n'] as num).toInt(), false)),
   'momentum_up': CondSpec({'atr': 1.0}, 'زخم صاعد', 'upward momentum',
       (fs, i, p) => i >= 10 && (fs.c[i] - fs.c[i - 10]) > _n(p['atr']) * fs.atr[i]),
   'momentum_down': CondSpec({'atr': 1.0}, 'زخم هابط', 'downward momentum',
@@ -97,8 +140,16 @@ Cond validate(Map cond) {
   if (cid == 'market' && !const ['trending', 'ranging', 'volatile'].contains(params['condition'])) {
     throw StrategyError('market condition must be trending, ranging or volatile');
   }
-  if ((cid == 'price_above_ema' || cid == 'price_below_ema') && !const [9, 21, 50].contains(params['period'])) {
-    throw StrategyError('EMA period must be 9, 21 or 50');
+  if ((cid == 'price_above_ema' || cid == 'price_below_ema') && !emaPeriods.contains(params['period'])) {
+    throw StrategyError('EMA period must be one of 5, 9, 13, 21, 50, 200');
+  }
+  if ((cid == 'ema_cross_up' || cid == 'ema_cross_down') &&
+      !(emaPeriods.contains(params['fast']) && emaPeriods.contains(params['slow']) &&
+          (params['fast'] as num) < (params['slow'] as num))) {
+    throw StrategyError('EMA cross needs fast < slow, both in 5, 9, 13, 21, 50, 200');
+  }
+  if ((cid == 'candle_streak_up' || cid == 'candle_streak_down') && !const [2, 3, 4, 5, 6].contains(params['n'])) {
+    throw StrategyError('candle streak length must be 2..6');
   }
   return {'id': cid, ...params};
 }

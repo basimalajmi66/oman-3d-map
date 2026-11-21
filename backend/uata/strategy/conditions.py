@@ -36,6 +36,19 @@ def _near(fs: FeatureSet, i: int, kind: str, atr_mult: float) -> bool:
     return any(k == kind and abs(p - fs.c[i]) <= atr_mult * a for p, k, _ in fs.levels(i))
 
 
+def _cross(a, b, i: int, up: bool) -> bool:
+    """a crosses b at bar i (all four values known)."""
+    if i < 1 or any(_nan(float(x)) for x in (a[i - 1], b[i - 1], a[i], b[i])):
+        return False
+    return a[i - 1] <= b[i - 1] and a[i] > b[i] if up else a[i - 1] >= b[i - 1] and a[i] < b[i]
+
+
+def _streak(fs: FeatureSet, i: int, n: int, up: bool) -> bool:
+    if i < n - 1:
+        return False
+    return all((fs.c[j] > fs.o[j]) if up else (fs.c[j] < fs.o[j]) for j in range(i - n + 1, i + 1))
+
+
 def _breakout(fs: FeatureSet, i: int, up: bool) -> bool:
     if i < 1:
         return False
@@ -90,11 +103,48 @@ CATALOG: dict[str, dict[str, Any]] = {
                "fn": lambda fs, i, p: fs.market_condition(i) == p["condition"]},
     "bullish_candle": {"params": {}, "ar": "شمعة صاعدة", "en": "bullish candle", "fn": lambda fs, i, p: fs.c[i] > fs.o[i]},
     "bearish_candle": {"params": {}, "ar": "شمعة هابطة", "en": "bearish candle", "fn": lambda fs, i, p: fs.c[i] < fs.o[i]},
+    "stoch_below": {"params": {"value": 20}, "ar": "ستوكاستيك أقل من {value}", "en": "Stochastic below {value}",
+                    "fn": lambda fs, i, p: not _nan(fs.stoch_k[i]) and fs.stoch_k[i] < p["value"]},
+    "stoch_above": {"params": {"value": 80}, "ar": "ستوكاستيك أعلى من {value}", "en": "Stochastic above {value}",
+                    "fn": lambda fs, i, p: not _nan(fs.stoch_k[i]) and fs.stoch_k[i] > p["value"]},
+    "stoch_cross_up": {"params": {}, "ar": "تقاطع ستوكاستيك صاعد", "en": "Stochastic bullish cross",
+                       "fn": lambda fs, i, p: _cross(fs.stoch_k, fs.stoch_d, i, True)},
+    "stoch_cross_down": {"params": {}, "ar": "تقاطع ستوكاستيك هابط", "en": "Stochastic bearish cross",
+                         "fn": lambda fs, i, p: _cross(fs.stoch_k, fs.stoch_d, i, False)},
+    "adx_above": {"params": {"value": 25}, "ar": "ADX أعلى من {value} (اتجاه قوي)", "en": "ADX above {value} (strong trend)",
+                  "fn": lambda fs, i, p: not _nan(fs.adx[i]) and fs.adx[i] > p["value"]},
+    "adx_below": {"params": {"value": 20}, "ar": "ADX أقل من {value} (لا اتجاه)", "en": "ADX below {value} (no trend)",
+                  "fn": lambda fs, i, p: not _nan(fs.adx[i]) and fs.adx[i] < p["value"]},
+    "di_bull": {"params": {}, "ar": "+DI فوق -DI", "en": "+DI above -DI",
+                "fn": lambda fs, i, p: not _nan(fs.pdi[i]) and fs.pdi[i] > fs.mdi[i]},
+    "di_bear": {"params": {}, "ar": "-DI فوق +DI", "en": "-DI above +DI",
+                "fn": lambda fs, i, p: not _nan(fs.pdi[i]) and fs.mdi[i] > fs.pdi[i]},
+    "sar_bull": {"params": {}, "ar": "Parabolic SAR تحت السعر", "en": "Parabolic SAR below price",
+                 "fn": lambda fs, i, p: fs.sar_dir[i] == 1.0},
+    "sar_bear": {"params": {}, "ar": "Parabolic SAR فوق السعر", "en": "Parabolic SAR above price",
+                 "fn": lambda fs, i, p: fs.sar_dir[i] == -1.0},
+    "sar_flip_up": {"params": {}, "ar": "انقلاب SAR للأعلى", "en": "SAR flips up",
+                    "fn": lambda fs, i, p: i > 0 and fs.sar_dir[i] == 1.0 and fs.sar_dir[i - 1] == -1.0},
+    "sar_flip_down": {"params": {}, "ar": "انقلاب SAR للأسفل", "en": "SAR flips down",
+                      "fn": lambda fs, i, p: i > 0 and fs.sar_dir[i] == -1.0 and fs.sar_dir[i - 1] == 1.0},
+    "ema_cross_up": {"params": {"fast": 5, "slow": 13}, "ar": "تقاطع EMA {fast} فوق EMA {slow}",
+                     "en": "EMA {fast} crosses above EMA {slow}",
+                     "fn": lambda fs, i, p: _cross(fs.ema[p["fast"]], fs.ema[p["slow"]], i, True)},
+    "ema_cross_down": {"params": {"fast": 5, "slow": 13}, "ar": "تقاطع EMA {fast} تحت EMA {slow}",
+                       "en": "EMA {fast} crosses below EMA {slow}",
+                       "fn": lambda fs, i, p: _cross(fs.ema[p["fast"]], fs.ema[p["slow"]], i, False)},
+    "candle_streak_up": {"params": {"n": 3}, "ar": "{n} شموع صاعدة متتالية", "en": "{n} bullish candles in a row",
+                         "fn": lambda fs, i, p: _streak(fs, i, p["n"], True)},
+    "candle_streak_down": {"params": {"n": 3}, "ar": "{n} شموع هابطة متتالية", "en": "{n} bearish candles in a row",
+                           "fn": lambda fs, i, p: _streak(fs, i, p["n"], False)},
     "momentum_up": {"params": {"atr": 1.0}, "ar": "زخم صاعد", "en": "upward momentum",
                     "fn": lambda fs, i, p: i >= 10 and (fs.c[i] - fs.c[i - 10]) > p["atr"] * fs.atr[i]},
     "momentum_down": {"params": {"atr": 1.0}, "ar": "زخم هابط", "en": "downward momentum",
                       "fn": lambda fs, i, p: i >= 10 and (fs.c[i - 10] - fs.c[i]) > p["atr"] * fs.atr[i]},
 }
+
+
+EMA_PERIODS = (5, 9, 13, 21, 50, 200)
 
 
 def validate(cond: dict) -> dict:
@@ -109,8 +159,13 @@ def validate(cond: dict) -> dict:
         raise ValueError(f"unknown pattern '{params['name']}'")
     if cid == "market" and params["condition"] not in ("trending", "ranging", "volatile"):
         raise ValueError("market condition must be trending, ranging or volatile")
-    if cid in ("price_above_ema", "price_below_ema") and params["period"] not in (9, 21, 50):
-        raise ValueError("EMA period must be 9, 21 or 50")
+    if cid in ("price_above_ema", "price_below_ema") and params["period"] not in EMA_PERIODS:
+        raise ValueError("EMA period must be one of 5, 9, 13, 21, 50, 200")
+    if cid in ("ema_cross_up", "ema_cross_down") and not (
+            params["fast"] in EMA_PERIODS and params["slow"] in EMA_PERIODS and params["fast"] < params["slow"]):
+        raise ValueError("EMA cross needs fast < slow, both in 5, 9, 13, 21, 50, 200")
+    if cid in ("candle_streak_up", "candle_streak_down") and params["n"] not in (2, 3, 4, 5, 6):
+        raise ValueError("candle streak length must be 2..6")
     return {"id": cid, **params}
 
 

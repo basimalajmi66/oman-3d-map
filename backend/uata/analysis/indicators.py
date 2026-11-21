@@ -118,3 +118,92 @@ def linreg_slope(x, n: int) -> np.ndarray:
         w = x[i - n + 1:i + 1]
         out[i] = (t * (w - w.mean())).sum() / denom
     return out
+
+
+# ---------------------------------------------------------------- oscillators / trend strength used by strategies
+# Written as plain loops on purpose: the phone engine (Dart) runs the very same operations in the same order, so
+# both engines produce bit-identical values (parity tests).
+
+def _sma_strict(x: np.ndarray, n: int) -> np.ndarray:
+    """Simple average of the last n values; NaN if any of them is NaN (sequential sum)."""
+    out = np.full(len(x), NAN)
+    for i in range(n - 1, len(x)):
+        s = 0.0
+        ok = True
+        for j in range(i - n + 1, i + 1):
+            v = float(x[j])
+            if v != v:
+                ok = False
+                break
+            s += v
+        if ok:
+            out[i] = s / n
+    return out
+
+
+def stochastic(high, low, close, k: int = 14, d: int = 3, smooth: int = 3) -> tuple[np.ndarray, np.ndarray]:
+    """Slow stochastic: %K = SMA(smooth) of the raw %K over k bars, %D = SMA(d) of %K (0..100)."""
+    h, lo, c = _arr(high), _arr(low), _arr(close)
+    raw = np.full(len(c), NAN)
+    for i in range(k - 1, len(c)):
+        hh = max(float(v) for v in h[i - k + 1:i + 1])
+        ll = min(float(v) for v in lo[i - k + 1:i + 1])
+        rng = hh - ll
+        raw[i] = 50.0 if rng == 0 else 100.0 * (float(c[i]) - ll) / rng
+    kk = _sma_strict(raw, smooth)
+    return kk, _sma_strict(kk, d)
+
+
+def adx(high, low, close, n: int = 14) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Wilder's ADX with +DI / -DI."""
+    h, lo, c = _arr(high), _arr(low), _arr(close)
+    m = len(c)
+    pdm, mdm = np.zeros(m), np.zeros(m)
+    for i in range(1, m):
+        up, down = float(h[i]) - float(h[i - 1]), float(lo[i - 1]) - float(lo[i])
+        pdm[i] = up if (up > down and up > 0) else 0.0
+        mdm[i] = down if (down > up and down > 0) else 0.0
+    s_tr, s_p, s_m = _wilder(true_range(h, lo, c), n), _wilder(pdm, n), _wilder(mdm, n)
+    pdi, mdi, dx = np.full(m, NAN), np.full(m, NAN), np.full(m, NAN)
+    for i in range(m):
+        t = float(s_tr[i])
+        if t != t:
+            continue
+        p = 0.0 if t == 0 else 100.0 * float(s_p[i]) / t
+        q = 0.0 if t == 0 else 100.0 * float(s_m[i]) / t
+        pdi[i], mdi[i] = p, q
+        dx[i] = 0.0 if p + q == 0 else 100.0 * abs(p - q) / (p + q)
+    out = np.full(m, NAN)
+    if m >= n:
+        out[n - 1:] = _wilder(dx[n - 1:], n)
+    return out, pdi, mdi
+
+
+def psar(high, low, step: float = 0.02, max_af: float = 0.2) -> tuple[np.ndarray, np.ndarray]:
+    """Parabolic SAR and its direction (+1 up: SAR below price, -1 down: SAR above price)."""
+    h, lo = _arr(high), _arr(low)
+    m = len(h)
+    sar_out, dir_out = np.full(m, NAN), np.full(m, NAN)
+    if m < 2:
+        return sar_out, dir_out
+    up = float(h[1]) + float(lo[1]) >= float(h[0]) + float(lo[0])
+    sar = float(lo[0]) if up else float(h[0])
+    ep = float(h[1]) if up else float(lo[1])
+    af = step
+    sar_out[1], dir_out[1] = sar, 1.0 if up else -1.0
+    for i in range(2, m):
+        sar = sar + af * (ep - sar)
+        if up:
+            sar = min(sar, float(lo[i - 1]), float(lo[i - 2]))
+            if float(lo[i]) < sar:
+                up, sar, ep, af = False, ep, float(lo[i]), step
+            elif float(h[i]) > ep:
+                ep, af = float(h[i]), min(af + step, max_af)
+        else:
+            sar = max(sar, float(h[i - 1]), float(h[i - 2]))
+            if float(h[i]) > sar:
+                up, sar, ep, af = True, ep, float(h[i]), step
+            elif float(lo[i]) < ep:
+                ep, af = float(lo[i]), min(af + step, max_af)
+        sar_out[i], dir_out[i] = sar, 1.0 if up else -1.0
+    return sar_out, dir_out

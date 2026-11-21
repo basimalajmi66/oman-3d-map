@@ -17,8 +17,16 @@ FeatureSet fsOf(List<Map<String, double>> s) => FeatureSet([for (final c in s) c
 final params = <String, List<Map<String, dynamic>>>{
   'rsi_below': [{}, {'value': 40}],
   'rsi_above': [{}, {'value': 60}],
-  'price_above_ema': [{}, {'period': 9}, {'period': 50}],
-  'price_below_ema': [{}, {'period': 9}],
+  'price_above_ema': [{}, {'period': 9}, {'period': 50}, {'period': 5}, {'period': 13}, {'period': 200}],
+  'price_below_ema': [{}, {'period': 9}, {'period': 200}],
+  'stoch_below': [{}, {'value': 30}, {'value': 50}],
+  'stoch_above': [{}, {'value': 70}, {'value': 50}],
+  'adx_above': [{}, {'value': 15}, {'value': 35}],
+  'adx_below': [{}, {'value': 30}],
+  'ema_cross_up': [{}, {'fast': 9, 'slow': 21}, {'fast': 21, 'slow': 50}],
+  'ema_cross_down': [{}, {'fast': 9, 'slow': 21}],
+  'candle_streak_up': [{}, {'n': 2}, {'n': 5}],
+  'candle_streak_down': [{}, {'n': 2}],
   'near_support': [{}, {'atr': 1.5}],
   'near_resistance': [{}, {'atr': 1.5}],
   'pattern': [

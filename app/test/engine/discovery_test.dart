@@ -31,9 +31,9 @@ import 'package:uata_app/engine/strategy/features.dart';
 }
 
 void main() {
-  test('375 mirrored candidates, durations of 2 / 4 / 6 candles', () {
+  test('681 mirrored candidates, durations of 2 / 4 / 6 candles', () {
     final cs = candidates(30);
-    expect(cs, hasLength(375));
+    expect(cs, hasLength(681));
     expect({for (final c in cs) c.definition['duration_sec']}, {60, 120, 180});
     expect(cs.every((c) => ((c.definition['long'] as Map)['all'] as List).isNotEmpty &&
         ((c.definition['short'] as Map)['all'] as List).isNotEmpty), isTrue);
@@ -68,7 +68,7 @@ void main() {
     final bytes = utf8.encode(csv.toString());
     final d = await api.importDataset(UploadFile(name: 'x.csv', length: bytes.length, openRead: () => Stream.value(bytes)), name: 'test');
     final rep = await api.discoverStrategies(d['id'] as int, payout: 0.88);
-    expect(rep['candidates_tested'], 375);
+    expect(rep['candidates_tested'], 681);
     expect((rep['dataset'] as Map)['timeframe_sec'], 30);
     expect(rep['breakeven_win_rate'], closeTo(1 / 1.88, 1e-4));
     engine.close();

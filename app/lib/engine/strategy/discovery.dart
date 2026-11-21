@@ -38,6 +38,11 @@ const _triggers = <Setup>[
   ('زخم', 'momentum', [{'id': 'momentum_up', 'atr': 1.0}], [{'id': 'momentum_down', 'atr': 1.0}]),
   ('زخم قوي', 'strong momentum', [{'id': 'momentum_up', 'atr': 1.5}], [{'id': 'momentum_down', 'atr': 1.5}]),
   ('شمعة باتجاه', 'candle colour', [{'id': 'bullish_candle'}], [{'id': 'bearish_candle'}]),
+  ('ستوكاستيك 20 / 80', 'Stochastic 20 / 80', [{'id': 'stoch_below', 'value': 20}], [{'id': 'stoch_above', 'value': 80}]),
+  ('تقاطع ستوكاستيك', 'Stochastic cross', [{'id': 'stoch_cross_up'}, {'id': 'stoch_below', 'value': 30}], [{'id': 'stoch_cross_down'}, {'id': 'stoch_above', 'value': 70}]),
+  ('تقاطع EMA 5/13', 'EMA 5/13 cross', [{'id': 'ema_cross_up', 'fast': 5, 'slow': 13}], [{'id': 'ema_cross_down', 'fast': 5, 'slow': 13}]),
+  ('انقلاب Parabolic SAR', 'Parabolic SAR flip', [{'id': 'sar_flip_up'}], [{'id': 'sar_flip_down'}]),
+  ('انعكاس بعد 3 شموع', 'reversal after 3 candles', [{'id': 'candle_streak_down', 'n': 3}], [{'id': 'candle_streak_up', 'n': 3}]),
 ];
 
 const _filters = <Setup>[
@@ -50,6 +55,9 @@ const _filters = <Setup>[
   ('سوق متجه', 'trending market', [{'id': 'market', 'condition': 'trending'}], [{'id': 'market', 'condition': 'trending'}]),
   ('ترتيب المتوسطات', 'EMA alignment', [{'id': 'ema_bull_alignment'}], [{'id': 'ema_bear_alignment'}]),
   ('مع EMA 21', 'with EMA 21', [{'id': 'price_above_ema', 'period': 21}], [{'id': 'price_below_ema', 'period': 21}]),
+  ('مع EMA 200', 'with EMA 200', [{'id': 'price_above_ema', 'period': 200}], [{'id': 'price_below_ema', 'period': 200}]),
+  ('اتجاه قوي ADX', 'strong trend (ADX)', [{'id': 'adx_above', 'value': 25}, {'id': 'di_bull'}], [{'id': 'adx_above', 'value': 25}, {'id': 'di_bear'}]),
+  ('بلا اتجاه ADX', 'no trend (ADX)', [{'id': 'adx_below', 'value': 20}], [{'id': 'adx_below', 'value': 20}]),
 ];
 
 class Candidate {

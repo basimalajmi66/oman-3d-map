@@ -32,7 +32,10 @@ class FeatureSet:
         self.rsi = ind.rsi(c_, 14)
         self.macd, self.macd_sig, self.macd_hist = ind.macd(c_)
         self.bb_lo, self.bb_mid, self.bb_hi = ind.bollinger(c_, 20, 2.0)
-        self.ema = {9: ind.ema(c_, 9), 21: ind.ema(c_, 21), 50: ind.ema(c_, 50)}
+        self.ema = {n: ind.ema(c_, n) for n in (5, 9, 13, 21, 50, 200)}
+        self.stoch_k, self.stoch_d = ind.stochastic(self.h, self.l, c_)
+        self.adx, self.pdi, self.mdi = ind.adx(self.h, self.l, c_)
+        self.sar, self.sar_dir = ind.psar(self.h, self.l)
         self.slope = ind.linreg_slope(c_, 20)
         self.slope10 = ind.linreg_slope(c_, 10)
         with np.errstate(divide="ignore", invalid="ignore"):

@@ -216,4 +216,116 @@ const starterStrategies = <StarterStrategy>[
       'duration_sec': 60,
     },
   ),
+  // ---- strategies widely circulated among Pocket Option / binary-options traders (forums, videos, free PDFs).
+  // Written from their commonly shared rules; none is proven — the historical test and paper trading decide.
+  StarterStrategy(
+    'مجتمع: RSI مع بولينجر',
+    'من أشهر استراتيجيات الدقيقة: الإغلاق خارج بولينجر السفلي مع RSI أقل من 30 للشراء، وخارج العلوي مع RSI أعلى من 70 للبيع.',
+    'One of the most shared 1-minute setups: a close outside the lower Bollinger band with RSI < 30 to buy, outside the upper band with RSI > 70 to sell.',
+    {
+      'long': {'all': [{'id': 'bb_below_lower'}, {'id': 'rsi_below', 'value': 30}]},
+      'short': {'all': [{'id': 'bb_above_upper'}, {'id': 'rsi_above', 'value': 70}]},
+      'duration_sec': 60,
+    },
+  ),
+  StarterStrategy(
+    'مجتمع: تقاطع EMA 5 و13',
+    'شراء عندما يقطع المتوسط الأسرع EMA 5 المتوسط EMA 13 للأعلى، وبيع عند التقاطع للأسفل.',
+    'Buy when the fast EMA 5 crosses above EMA 13, sell when it crosses below.',
+    {
+      'long': {'all': [{'id': 'ema_cross_up', 'fast': 5, 'slow': 13}]},
+      'short': {'all': [{'id': 'ema_cross_down', 'fast': 5, 'slow': 13}]},
+      'duration_sec': 120,
+    },
+  ),
+  StarterStrategy(
+    'مجتمع: تقاطع EMA 5/13 مع EMA 200',
+    'تقاطع EMA 5 و13 فقط في اتجاه EMA 200: شراء فوقه، وبيع تحته.',
+    'The EMA 5/13 cross only in the direction of EMA 200: buys above it, sells below it.',
+    {
+      'long': {'all': [{'id': 'ema_cross_up', 'fast': 5, 'slow': 13}, {'id': 'price_above_ema', 'period': 200}]},
+      'short': {'all': [{'id': 'ema_cross_down', 'fast': 5, 'slow': 13}, {'id': 'price_below_ema', 'period': 200}]},
+      'duration_sec': 180,
+    },
+  ),
+  StarterStrategy(
+    'مجتمع: ستوكاستيك مع بولينجر',
+    'ستوكاستيك أقل من 20 والإغلاق تحت بولينجر السفلي للشراء، وأعلى من 80 فوق العلوي للبيع.',
+    'Stochastic below 20 with a close below the lower band to buy; above 80 with a close above the upper band to sell.',
+    {
+      'long': {'all': [{'id': 'stoch_below', 'value': 20}, {'id': 'bb_below_lower'}]},
+      'short': {'all': [{'id': 'stoch_above', 'value': 80}, {'id': 'bb_above_upper'}]},
+      'duration_sec': 60,
+    },
+  ),
+  StarterStrategy(
+    'مجتمع: تقاطع ستوكاستيك في منطقة التشبع',
+    'تقاطع %K فوق %D وهو تحت 25 للشراء، وتحت %D وهو فوق 75 للبيع.',
+    '%K crossing above %D while below 25 to buy; crossing below %D while above 75 to sell.',
+    {
+      'long': {'all': [{'id': 'stoch_cross_up'}, {'id': 'stoch_below', 'value': 25}]},
+      'short': {'all': [{'id': 'stoch_cross_down'}, {'id': 'stoch_above', 'value': 75}]},
+      'duration_sec': 120,
+    },
+  ),
+  StarterStrategy(
+    'مجتمع: MACD مع EMA 200',
+    'تقاطع MACD صاعد والسعر فوق EMA 200 للشراء، وهابط والسعر تحته للبيع.',
+    'A bullish MACD cross above EMA 200 to buy, a bearish cross below it to sell.',
+    {
+      'long': {'all': [{'id': 'macd_cross_up'}, {'id': 'price_above_ema', 'period': 200}]},
+      'short': {'all': [{'id': 'macd_cross_down'}, {'id': 'price_below_ema', 'period': 200}]},
+      'duration_sec': 180,
+    },
+  ),
+  StarterStrategy(
+    'مجتمع: Parabolic SAR مع ADX',
+    'انقلاب SAR تحت السعر مع ADX أعلى من 25 و+DI فوق -DI للشراء، والعكس للبيع.',
+    'SAR flips below price with ADX > 25 and +DI above -DI to buy; the reverse to sell.',
+    {
+      'long': {'all': [{'id': 'sar_flip_up'}, {'id': 'adx_above', 'value': 25}, {'id': 'di_bull'}]},
+      'short': {'all': [{'id': 'sar_flip_down'}, {'id': 'adx_above', 'value': 25}, {'id': 'di_bear'}]},
+      'duration_sec': 120,
+    },
+  ),
+  StarterStrategy(
+    'مجتمع: ثلاث شموع مع الزخم',
+    'ثلاث شموع صاعدة متتالية مع اتجاه قوي (ADX أعلى من 20) للشراء، وثلاث هابطة للبيع.',
+    'Three bullish candles in a row with a trend (ADX > 20) to buy, three bearish ones to sell.',
+    {
+      'long': {'all': [{'id': 'candle_streak_up', 'n': 3}, {'id': 'adx_above', 'value': 20}]},
+      'short': {'all': [{'id': 'candle_streak_down', 'n': 3}, {'id': 'adx_above', 'value': 20}]},
+      'duration_sec': 60,
+    },
+  ),
+  StarterStrategy(
+    'مجتمع: الانعكاس بعد ثلاث شموع',
+    'بعد ثلاث شموع هابطة مع RSI أقل من 35 شراء (توقع ارتداد)، وبعد ثلاث صاعدة مع RSI أعلى من 65 بيع.',
+    'After three bearish candles with RSI < 35 buy (expecting a bounce); after three bullish ones with RSI > 65 sell.',
+    {
+      'long': {'all': [{'id': 'candle_streak_down', 'n': 3}, {'id': 'rsi_below', 'value': 35}]},
+      'short': {'all': [{'id': 'candle_streak_up', 'n': 3}, {'id': 'rsi_above', 'value': 65}]},
+      'duration_sec': 60,
+    },
+  ),
+  StarterStrategy(
+    'مجتمع: Pin Bar مع RSI',
+    'شمعة مطرقة مع RSI أقل من 40 للشراء، وشمعة شهاب مع RSI أعلى من 60 للبيع.',
+    'A hammer with RSI < 40 to buy, a shooting star with RSI > 60 to sell.',
+    {
+      'long': {'all': [{'id': 'pattern', 'name': 'hammer'}, {'id': 'rsi_below', 'value': 40}]},
+      'short': {'all': [{'id': 'pattern', 'name': 'shooting_star'}, {'id': 'rsi_above', 'value': 60}]},
+      'duration_sec': 120,
+    },
+  ),
+  StarterStrategy(
+    'مجتمع: RSI في السوق بلا اتجاه (ADX)',
+    'عندما يكون ADX أقل من 20 (لا اتجاه): RSI أقل من 30 للشراء وأعلى من 70 للبيع.',
+    'When ADX is below 20 (no trend): RSI < 30 to buy, RSI > 70 to sell.',
+    {
+      'long': {'all': [{'id': 'rsi_below', 'value': 30}, {'id': 'adx_below', 'value': 20}]},
+      'short': {'all': [{'id': 'rsi_above', 'value': 70}, {'id': 'adx_below', 'value': 20}]},
+      'duration_sec': 60,
+    },
+  ),
 ];

@@ -32,8 +32,8 @@ class FakeData extends MarketDataClient {
 
 void main() {
   test('every starter strategy is valid, unique and lasts 1 to 5 minutes', () {
-    expect(starterStrategies, hasLength(20));
-    expect(starterStrategies.map((s) => s.name).toSet(), hasLength(20));
+    expect(starterStrategies, hasLength(31)); // 20 classic + 11 widely circulated among binary-options traders
+    expect(starterStrategies.map((s) => s.name).toSet(), hasLength(31));
     for (final s in starterStrategies) {
       final d = cnd.validateDefinition(s.definition); // throws on any unknown condition / parameter
       expect(d['duration_sec'], inInclusiveRange(60, 300), reason: s.name);

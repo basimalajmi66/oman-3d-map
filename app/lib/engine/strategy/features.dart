@@ -26,7 +26,17 @@ class FeatureSet {
     bbLo = bb.lower;
     bbMid = bb.mid;
     bbHi = bb.upper;
-    ema = {9: ind.ema(c, 9), 21: ind.ema(c, 21), 50: ind.ema(c, 50)};
+    ema = {for (final p in const [5, 9, 13, 21, 50, 200]) p: ind.ema(c, p)};
+    final st = ind.stochastic(h, l, c);
+    stochK = st.k;
+    stochD = st.d;
+    final ax = ind.adx(h, l, c);
+    adx = ax.adx;
+    pdi = ax.pdi;
+    mdi = ax.mdi;
+    final ps = ind.psar(h, l);
+    sar = ps.sar;
+    sarDir = ps.dir;
     slope = ind.linregSlope(c, 20);
     slope10 = ind.linregSlope(c, 10);
     atrPct = [for (var i = 0; i < n; i++) atr[i] / c[i].abs()];
@@ -46,6 +56,7 @@ class FeatureSet {
   final List<double>? v;
   final int n;
   late final List<double> atr, rsi, macd, macdSig, macdHist, bbLo, bbMid, bbHi, slope, slope10, atrPct;
+  late final List<double> stochK, stochD, adx, pdi, mdi, sar, sarDir;
   late final Map<int, List<double>> ema;
   final pivHi = <int>[], pivLo = <int>[];
   final Map<int, List<LevelT>> _levelsCache = {};
