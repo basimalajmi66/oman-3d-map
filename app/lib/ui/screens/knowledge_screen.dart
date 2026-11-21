@@ -2,8 +2,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/engine_api.dart';
+import '../../engine/strategy/from_text.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
+import 'training_screen.dart' show createTestAndOpen;
 import 'learning_reports_screen.dart';
 import 'videos_screen.dart';
 
@@ -157,6 +159,22 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
     await _reload();
   }
 
+  /// The approved rules of this source → a strategy, tested right away on real prices (untestable rules listed).
+  Future<void> _rulesToStrategy(Json source, List<Json> items) async {
+    final app = AppScope.read(context);
+    final text = [
+      for (final it in items)
+        if (it['item_type'] == 'rule' && it['status'] == 'approved') (it['content'] as String? ?? '').trim()
+    ].join('\n');
+    final (def, used, untestable) = strategyFromText(text);
+    if (used.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.t('strategy_nothing_testable'))));
+      return;
+    }
+    await createTestAndOpen(context, app, '${source['title'] ?? app.t('library')} (${app.t('library')})',
+        {...def, 'untestable': untestable});
+  }
+
   Future<void> _decide(Json item, String decision) async {
     await runWithFeedback(context, () => app.engine.decideItem(item['id'] as int, decision));
     await _reload();
@@ -295,6 +313,16 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
       const Divider(height: 24),
       Text(app.t('items'), style: Theme.of(context).textTheme.titleMedium),
       if (items.isEmpty) Padding(padding: const EdgeInsets.all(8), child: Text(app.t('none'))),
+      if (items.any((it) => it['item_type'] == 'rule' && it['status'] == 'approved'))
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: FilledButton.tonalIcon(
+            key: const Key('rules_to_strategy'),
+            onPressed: () => _rulesToStrategy(s, items),
+            icon: const Icon(Icons.auto_fix_high),
+            label: Text(app.t('rules_to_strategy')),
+          ),
+        ),
       ...items.map((it) => Card(
             child: Padding(
               padding: const EdgeInsets.all(12),

@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/engine_api.dart';
+import '../../engine/strategy/from_text.dart';
 import '../../l10n/strings.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
@@ -55,6 +56,26 @@ class TrainingScreen extends StatelessWidget {
   }
 }
 
+/// Create a strategy, test it right away on real prices of the timeframe in use, and open its page (results and
+/// the approve button). Used by "new strategy" (own words) and by the library (approved rules).
+Future<void> createTestAndOpen(BuildContext context, AppState app, String name, Json definition) async {
+  Json? s;
+  final ok = await runWithFeedback(context, () async => s = await app.engine.createStrategy(name, definition));
+  if (!ok || s == null || !context.mounted) return;
+  final id = s!['id'] as int;
+  final tf = app.settings['candle_timeframe_sec'];
+  final data = [for (final d in await app.engine.listDatasets()) if (d['timeframe_sec'] == tf && d['is_synthetic'] != 1) d]
+    ..sort((a, b) => (b['id'] as int).compareTo(a['id'] as int));
+  if (!context.mounted) return;
+  if (data.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.t('strategy_no_data_for_tf'))));
+  } else {
+    await runWithFeedback(context, () => app.engine.backtest(id, data.first['id'] as int));
+  }
+  if (!context.mounted) return;
+  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => StrategyPage(strategyId: id)));
+}
+
 // ---------------------------------------------------------------- strategies list
 class _StrategiesTab extends StatefulWidget {
   const _StrategiesTab();
@@ -86,8 +107,7 @@ class _StrategiesTabState extends State<_StrategiesTab> {
   Future<void> _create() async {
     final created = await showDialog<Json>(context: context, builder: (_) => _StrategyBuilder(app: app));
     if (created == null || !mounted) return;
-    await runWithFeedback(context, () => app.engine.createStrategy(created['name'] as String, created['definition'] as Json),
-        successKey: 'saved');
+    await createTestAndOpen(context, app, created['name'] as String, created['definition'] as Json);
     await _reload();
   }
 
@@ -396,6 +416,28 @@ class _StrategyBuilder extends StatefulWidget {
 class _StrategyBuilderState extends State<_StrategyBuilder> {
   final _name = TextEditingController();
   final _duration = TextEditingController(text: '120');
+  final _text = TextEditingController();
+  List<String> _untestable = [];
+  List<String> _used = [];
+  bool _converted = false;
+
+  /// The user's own words → conditions (deterministic reader; untestable sentences are listed, never guessed).
+  void _convert() {
+    final (def, used, untestable) = strategyFromText(_text.text, defaultDuration: int.tryParse(_duration.text) ?? 120);
+    setState(() {
+      _converted = true;
+      _used = used;
+      _untestable = untestable;
+      _conds['long'] = [for (final c in ((def['long'] as Map)['all'] as List)) (c as Map).cast<String, dynamic>()];
+      _conds['short'] = [for (final c in ((def['short'] as Map)['all'] as List)) (c as Map).cast<String, dynamic>()];
+      _conds['veto'] = [for (final c in (def['veto'] as List)) (c as Map).cast<String, dynamic>()];
+      _duration.text = '${def['duration_sec']}';
+      if (_name.text.trim().isEmpty) {
+        final t = _text.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+        _name.text = t.length > 40 ? '${t.substring(0, 40)}…' : t;
+      }
+    });
+  }
   List<Json> _catalog = [];
   final Map<String, List<Json>> _conds = {'long': [], 'short': [], 'veto': []};
 
@@ -443,6 +485,33 @@ class _StrategyBuilderState extends State<_StrategyBuilder> {
         width: 520,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(app.t('strategy_in_words'), style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            TextField(
+              key: const Key('strategy_text'),
+              controller: _text,
+              minLines: 3,
+              maxLines: 6,
+              decoration: InputDecoration(border: const OutlineInputBorder(), hintText: app.t('strategy_in_words_hint')),
+              onChanged: (_) => setState(() {}),
+            ),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: FilledButton.tonalIcon(
+                key: const Key('strategy_convert'),
+                onPressed: _text.text.trim().isEmpty ? null : _convert,
+                icon: const Icon(Icons.auto_fix_high),
+                label: Text(app.t('strategy_convert')),
+              ),
+            ),
+            if (_converted && _conds['long']!.isEmpty && _conds['short']!.isEmpty)
+              Text(app.t('strategy_nothing_testable'), key: const Key('strategy_nothing'),
+                  style: const TextStyle(color: SignalColors.wait, fontSize: 12)),
+            if (_converted && _used.isNotEmpty)
+              Text('${app.t('strategy_understood')}: ${_used.length}', style: const TextStyle(color: SignalColors.buy, fontSize: 12)),
+            for (final u in _untestable)
+              Text('• ${app.t('strategy_untestable')}: $u', style: const TextStyle(color: SignalColors.wait, fontSize: 12)),
+            const Divider(height: 20),
             TextField(key: const Key('strategy_name'), controller: _name, decoration: InputDecoration(labelText: app.t('title')),
                 onChanged: (_) => setState(() {})),
             const SizedBox(height: 8),
@@ -474,6 +543,8 @@ class _StrategyBuilderState extends State<_StrategyBuilder> {
                       'short': {'all': _conds['short']},
                       'veto': _conds['veto'],
                       'duration_sec': duration,
+                      if (_untestable.isNotEmpty) 'untestable': _untestable,
+                      if (_used.isNotEmpty) 'translated_rules': _used,
                     },
                   })
               : null,
