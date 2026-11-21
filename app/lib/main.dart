@@ -134,7 +134,17 @@ Future<void> startApp() async {
   if (Platform.isAndroid) {
     _live?.dispose();
     state.live = _live = LiveMode(
-        state: state, screen: AndroidScreenSource(), crop: loadLastCrop, commands: FlutterOverlayWindow.overlayListener);
+      state: state,
+      screen: AndroidScreenSource(),
+      crop: loadLastCrop,
+      commands: FlutterOverlayWindow.overlayListener,
+      onSetFrame: (png) async {
+        FlutterForegroundTask.launchApp(); // bring the app forward for the crop screen
+        final ctx = navigatorKey.currentContext;
+        if (ctx == null || !ctx.mounted) return;
+        await askChartCrop(ctx, state, UploadFile(name: 'screen.png', length: png.length, openRead: () => Stream.value(png)));
+      },
+    );
   }
   runApp(UataApp(state: state));
   // paper trading catches up now and every two minutes while the app is open (it never executes real trades)

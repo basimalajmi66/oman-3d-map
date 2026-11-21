@@ -73,7 +73,8 @@ class FloatingPanel extends StatelessWidget {
       return;
     }
     final err = await live.start();
-    messenger?.showSnackBar(SnackBar(content: Text(app.t(err ?? 'live_started'))));
+    final noFrame = err == null && await live.crop() == null;
+    messenger?.showSnackBar(SnackBar(content: Text(app.t(err ?? (noFrame ? 'live_started_no_frame' : 'live_started')))));
   }
 
   Future<void> _toggleOverlay(BuildContext context) async {

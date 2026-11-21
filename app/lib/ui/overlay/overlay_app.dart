@@ -159,6 +159,8 @@ class _OverlayCardState extends State<OverlayCard> {
                 },
               ),
             ]),
+            if (_data['note'] != null && _data['error'] == null)
+              Text('${_data['note']}', style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 11)),
             if (_data['error'] != null)
               Text('${_data['error']}', key: const Key('overlay_error'), style: const TextStyle(color: Colors.orangeAccent, fontSize: 11))
             else if (_data['reason'] != null)
@@ -182,7 +184,13 @@ class _OverlayCardState extends State<OverlayCard> {
                   label: Text(t('live_analyze'), overflow: TextOverflow.ellipsis),
                 ),
               ),
-              const SizedBox(width: 6),
+              IconButton(
+                key: const Key('overlay_frame'),
+                tooltip: t('live_set_frame'),
+                visualDensity: VisualDensity.compact,
+                onPressed: busy ? null : () => send?.call({'cmd': 'frame'}),
+                icon: const Icon(Icons.crop, color: Colors.white70, size: 20),
+              ),
               Text(t('live_auto'), style: const TextStyle(color: Colors.white70, fontSize: 11)),
               Switch(
                 key: const Key('overlay_auto'),

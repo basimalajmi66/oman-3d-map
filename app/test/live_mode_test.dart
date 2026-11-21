@@ -115,6 +115,19 @@ void main() {
     live.setAuto(false);
   });
 
+  test('"set frame": the trading app is captured (window hidden) and handed to the crop screen', () async {
+    final frames = <int>[];
+    final l2 = LiveMode(state: state, screen: screen, crop: () async => null, hideDelay: Duration.zero,
+        onSetFrame: (png) async => frames.add(png.length));
+    await l2.start();
+    o.pushed.clear();
+    await l2.handle({'cmd': 'frame'});
+    expect(o.pushed.first['hide'], true);
+    expect(frames, [screen.frame!.length]);
+    expect(o.pushed.last['note'], tr('ar', 'live_frame_saved'));
+    l2.dispose();
+  });
+
   test('the regular status updates never overwrite the live window', () async {
     await live.start();
     final n = o.pushed.length;

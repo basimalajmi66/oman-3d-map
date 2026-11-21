@@ -5,6 +5,7 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import '../core/engine_api.dart';
 import '../core/image_prep.dart';
@@ -18,6 +19,7 @@ class LiveMode {
     required this.crop,
     Stream<dynamic>? commands,
     DateTime Function()? now,
+    this.onSetFrame,
     this.hideDelay = const Duration(milliseconds: 350),
   }) : _now = now ?? DateTime.now {
     _sub = commands?.listen(handle);
@@ -28,6 +30,9 @@ class LiveMode {
   final Future<CropFrac?> Function() crop;
   final DateTime Function() _now;
   final Duration hideDelay;
+
+  /// "Set frame" from the floating window: the screen picture is handed over for the crop screen (main app).
+  final Future<void> Function(Uint8List png)? onSetFrame;
   StreamSubscription<dynamic>? _sub;
   Timer? _auto;
   bool auto = false;
@@ -80,6 +85,8 @@ class LiveMode {
         setAuto(msg['on'] == true);
       case 'stop':
         await stop();
+      case 'frame':
+        await setFrame();
     }
   }
 
@@ -99,6 +106,29 @@ class LiveMode {
       _lastCandle = candle;
       await analyzeNow();
     }
+  }
+
+  /// Capture the trading app as it is now and let the user draw the crop frame on that very picture.
+  Future<void> setFrame() async {
+    if (busy || !active || onSetFrame == null) return;
+    busy = true;
+    Uint8List? png;
+    try {
+      await _push(hide: true);
+      await Future<void>.delayed(hideDelay);
+      png = await screen.capture();
+    } finally {
+      busy = false;
+      await _push();
+    }
+    if (png == null) {
+      _last = {'error': state.t('live_no_frame')};
+      await _push();
+      return;
+    }
+    await onSetFrame!(png);
+    _last = {..._last, 'error': null, 'note': state.t('live_frame_saved')};
+    await _push();
   }
 
   Future<void> analyzeNow() async {
