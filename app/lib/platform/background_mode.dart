@@ -16,6 +16,7 @@ import '../data/market_data.dart';
 import '../data/paper_trading.dart';
 import '../engine/local/local_engine_api.dart';
 import '../l10n/strings.dart';
+import 'paper_location.dart';
 
 /// How often the service looks for newly closed candles. Downloads happen only when a candle has closed.
 const backgroundCheckMs = 15000;
@@ -108,7 +109,7 @@ class PaperTaskHandler extends TaskHandler {
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     final dir = (await getApplicationSupportDirectory()).path;
     _engine = await LocalEngine.open('$dir/uata', (v) => rootBundle.loadString('assets/schema/schema_v$v.sql'));
-    _paper = PaperTrader('$dir/paper');
+    _paper = PaperTrader(await paperDirectory());
     await _notes.initialize(settings: const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')));
     await _check();
   }

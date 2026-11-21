@@ -32,6 +32,10 @@ void main() {
     await api.createStrategy('Phone strategy', {'long': {'all': [{'id': 'bullish_candle'}]}, 'duration_sec': 60});
     await api.syntheticDataset(rows: 500);
     await api.patchSettings({'language': 'en'});
+    // paper-trading sessions live inside the engine's files (platform/paper_location.dart)
+    File('${engine.filesDir}/paper/sessions.json')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync('[{"id":"s1"}]');
     final b = await api.createBackup(pass);
     expect(b['name'], matches(RegExp(r'^uata-backup-\d{8}T\d{6}\.uatabak$')));
     expect((await api.listBackups()).single['name'], b['name']);
@@ -44,6 +48,7 @@ void main() {
     expect(String.fromCharCodes(f.readAsBytesSync()).contains('Phone strategy'), isFalse); // encrypted
     await api.wipe();
     expect(await api.listStrategies(), isEmpty);
+    expect(File('${engine.filesDir}/paper/sessions.json').existsSync(), isFalse); // "delete all data" includes them
     expect(await api.listBackups(), hasLength(1)); // backups survive a normal wipe
     final r = await api.restoreBackup(upload(f), pass);
     expect(r['restored'], true);
@@ -52,6 +57,7 @@ void main() {
     final ds = (await api.listDatasets()).single;
     expect(File('${engine.filesDir}/${ds['stored_path']}').existsSync(), isTrue);
     expect((await api.getSettings())['language'], 'en');
+    expect(File('${engine.filesDir}/paper/sessions.json').readAsStringSync(), '[{"id":"s1"}]'); // paper sessions too
     // the restored dataset is usable again (no stale cache)
     final s = (await api.listStrategies()).single;
     expect((await api.backtest(s['id'] as int, ds['id'] as int))['synthetic'], true);

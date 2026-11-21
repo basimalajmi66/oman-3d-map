@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'core/companion.dart';
 import 'core/engine_mode.dart';
@@ -17,6 +16,7 @@ import 'data/paper_trading.dart';
 import 'engine/local/local_host.dart';
 import 'platform/android_overlay.dart';
 import 'platform/background_mode.dart';
+import 'platform/paper_location.dart';
 import 'platform/screen_capture.dart';
 import 'state/live_mode.dart';
 import 'platform/share_intake.dart';
@@ -120,7 +120,7 @@ Future<void> startApp() async {
       await BackgroundMode.stop(); // the service belongs to the phone engine
       await restartAs(mode == 'local' ? 'remote' : 'local');
     },
-    paper: PaperTrader('${(await getApplicationSupportDirectory()).path}/paper'),
+    paper: PaperTrader(await paperDirectory()),
     askCrop: (f) async {
       final ctx = navigatorKey.currentContext;
       if (ctx == null || !ctx.mounted) return CropDecision(f, null); // no screen yet (share at start): whole image
