@@ -12,6 +12,9 @@ import 'dart:typed_data';
 
 import '../../core/engine_api.dart';
 import '../knowledge/extract.dart' as kx;
+import '../strategy/datasets.dart' as ds;
+import '../strategy/discovery.dart' as disc;
+import '../strategy/features.dart' show FeatureSet;
 import '../vision/axis.dart' show LineOcr;
 import 'backup.dart';
 import 'chart_inputs.dart';
@@ -395,3 +398,18 @@ Future<(List<kx.Chunk>, String?)> _extractPdfInBackground(Uint8List bytes) => Is
         return (<kx.Chunk>[], e.message);
       }
     });
+
+
+/// Strategy discovery on a stored dataset (phone engine), in a background isolate: it tries hundreds of combinations.
+extension Discovery on LocalEngineApi {
+  Future<Map<String, dynamic>> discoverStrategies(int datasetId, {double payout = 0.88}) async {
+    final meta = engine.strategies.getDataset(datasetId);
+    final path = '${engine.filesDir}/${meta['stored_path']}';
+    final tf = meta['timeframe_sec'] as int;
+    final report = await Isolate.run(() {
+      final d = ds.parseCsv(File(path).readAsStringSync());
+      return disc.discover(FeatureSet(d.open, d.high, d.low, d.close, v: d.volume), tf, payout: payout);
+    });
+    return {...report, 'dataset': {'id': datasetId, 'name': meta['name'], 'timeframe_sec': tf, 'rows': meta['rows']}};
+  }
+}

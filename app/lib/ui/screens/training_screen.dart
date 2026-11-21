@@ -2,11 +2,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/engine_api.dart';
+import '../../engine/local/local_engine_api.dart' show LocalEngineApi;
 import '../../engine/strategy/from_text.dart';
 import '../../l10n/strings.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
 import 'paper_trading_screen.dart';
+import 'discovery_screen.dart';
 import 'quick_start_screen.dart';
 import 'knowledge_screen.dart' show FilePickFn;
 
@@ -34,6 +36,13 @@ class TrainingScreen extends StatelessWidget {
         appBar: AppBar(
           title: Text(app.t('training_title')),
           actions: [
+            if (app.engine is LocalEngineApi)
+              IconButton(
+                key: const Key('open_discovery'),
+                tooltip: app.t('disc_title'),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DiscoveryScreen())),
+                icon: const Icon(Icons.travel_explore),
+              ),
             if (app.paper != null)
               IconButton(
                 key: const Key('open_paper'),
