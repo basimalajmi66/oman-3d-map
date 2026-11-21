@@ -39,7 +39,7 @@ class ScreenCaptureService : Service() {
         @Volatile var running = false
             private set
         private var projection: MediaProjection? = null
-        private var display: VirtualDisplay? = null
+        private var vdisplay: VirtualDisplay? = null
         private var reader: ImageReader? = null
         private var thread: HandlerThread? = null
 
@@ -98,7 +98,7 @@ class ScreenCaptureService : Service() {
         @Suppress("DEPRECATION")
         (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(metrics)
         val ir = ImageReader.newInstance(metrics.widthPixels, metrics.heightPixels, PixelFormat.RGBA_8888, 2)
-        display = mp.createVirtualDisplay("uata-screen", metrics.widthPixels, metrics.heightPixels, metrics.densityDpi,
+        vdisplay = mp.createVirtualDisplay("uata-screen", metrics.widthPixels, metrics.heightPixels, metrics.densityDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, ir.surface, null, handler)
         projection = mp
         reader = ir
@@ -128,8 +128,8 @@ class ScreenCaptureService : Service() {
 
     private fun release() {
         running = false
-        display?.release()
-        display = null
+        vdisplay?.release()
+        vdisplay = null
         reader?.close()
         reader = null
         projection = null
