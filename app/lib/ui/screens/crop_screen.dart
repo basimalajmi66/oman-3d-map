@@ -15,6 +15,9 @@ import '../../state/app_state.dart';
 const _prefKey = 'last_chart_crop';
 const _full = (0.0, 0.0, 1.0, 1.0);
 
+/// The crop frame the user chose last time (used by live analysis over the trading app), or null.
+Future<CropFrac?> loadLastCrop() => _loadLast();
+
 Future<CropFrac?> _loadLast() async {
   try {
     final v = (await SharedPreferences.getInstance()).getStringList(_prefKey);

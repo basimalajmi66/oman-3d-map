@@ -8,6 +8,7 @@ import '../core/image_prep.dart';
 import '../data/paper_trading.dart';
 import '../core/window_controller.dart';
 import '../l10n/strings.dart';
+import 'live_mode.dart';
 import '../platform/android_overlay.dart';
 
 /// Single source of UI state. Settings live in the engine's SQLite database so
@@ -134,8 +135,17 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// True while the floating window shows live analysis over the trading app ([LiveMode] feeds it then).
+  bool liveActive = false;
+
+  /// Live analysis over the trading app (Android); set by main, null elsewhere and in tests.
+  LiveMode? live;
+
+  /// For helpers that change state (e.g. [LiveMode]).
+  void changed() => notifyListeners();
+
   Future<void> _pushOverlay() async {
-    if (!overlayActive) return;
+    if (!overlayActive || liveActive) return;
     await overlay.push(overlayPayload(
       lang: lang,
       state: state,

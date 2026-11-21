@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -16,6 +17,8 @@ import 'data/paper_trading.dart';
 import 'engine/local/local_host.dart';
 import 'platform/android_overlay.dart';
 import 'platform/background_mode.dart';
+import 'platform/screen_capture.dart';
+import 'state/live_mode.dart';
 import 'platform/share_intake.dart';
 import 'state/app_state.dart';
 import 'ui/home/adaptive_home.dart';
@@ -27,6 +30,7 @@ import 'ui/screens/pairing_screen.dart';
 import 'ui/theme.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
+LiveMode? _live;
 
 /// A shared chart image: crop screen first, then the usual shrinking. Null = cancelled.
 Future<UploadFile?> _cropAndPrepare(AppState state, UploadFile f) async {
@@ -127,6 +131,11 @@ Future<void> startApp() async {
         : null,
   );
   await state.init();
+  if (Platform.isAndroid) {
+    _live?.dispose();
+    state.live = _live = LiveMode(
+        state: state, screen: AndroidScreenSource(), crop: loadLastCrop, commands: FlutterOverlayWindow.overlayListener);
+  }
   runApp(UataApp(state: state));
   // paper trading catches up now and every two minutes while the app is open (it never executes real trades)
   unawaited(state.paperTick());

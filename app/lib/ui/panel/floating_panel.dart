@@ -64,6 +64,18 @@ class FloatingPanel extends StatelessWidget {
     if (ok && result != null && context.mounted) await showChartResult(context, result!);
   }
 
+  Future<void> _toggleLive(BuildContext context) async {
+    final app = AppScope.read(context);
+    final live = app.live!;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (app.liveActive) {
+      await live.stop();
+      return;
+    }
+    final err = await live.start();
+    messenger?.showSnackBar(SnackBar(content: Text(app.t(err ?? 'live_started'))));
+  }
+
   Future<void> _toggleOverlay(BuildContext context) async {
     final app = AppScope.read(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
@@ -108,6 +120,15 @@ class FloatingPanel extends StatelessWidget {
                       const SizedBox(height: 10),
                       _Controls(app: app),
                       const SizedBox(height: 6),
+                      if (app.live != null) ...[
+                        FilledButton.tonalIcon(
+                          key: const Key('btn_live'),
+                          onPressed: app.connected ? () => _toggleLive(context) : null,
+                          icon: Icon(app.liveActive ? Icons.stop_circle_outlined : Icons.center_focus_strong),
+                          label: Text(app.t(app.liveActive ? 'live_stop' : 'live_start'), overflow: TextOverflow.ellipsis),
+                        ),
+                        const SizedBox(height: 6),
+                      ],
                       Row(children: [
                         Expanded(
                           child: OutlinedButton.icon(

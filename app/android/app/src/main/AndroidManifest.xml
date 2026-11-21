@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Background mode (turned on by the user, always with a visible notification and a Stop button) -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Analyse over the trading app: screen capture only after Android's own prompt, with a visible notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -69,6 +71,9 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Shows the trading assistant's current recommendation in a floating window chosen by the user. Display only; it never interacts with other apps." />
         </service>
+        <service android:name=".ScreenCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
         <!-- Background mode: paper trading + signal alerts while the app is closed. Never trades. -->
         <service android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:exported="false"
