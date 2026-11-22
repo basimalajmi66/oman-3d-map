@@ -201,29 +201,36 @@ Decision decide(Map reading, Map? technical, Map settings, List<Map> strategies,
   final supScore = sup.fold<double>(0, (a, f) => a + _num(f['strength']));
   final oppScore = opp.fold<double>(0, (a, f) => a + _num(f['strength']));
   final need = settings['min_confluence_factors'] as int;
-  if (sup.length < need) {
+  final strategyOnly = settings['strategy_only_signals'] == true;
+  if (strategyOnly) {
+    d.step(11, 'opposing_factors', 'info',
+        'strategy conditions alone: supporting ${pyFixed(supScore, 2)} vs opposing ${pyFixed(oppScore, 2)} (shown, not required)');
+  } else if (sup.length < need) {
     d.step(11, 'opposing_factors', 'fail', '${sup.length} supporting < $need required');
     d.reasonCodes.add('insufficient_confluence');
     return d;
-  }
-  if (oppScore >= supScore) {
+  } else if (oppScore >= supScore) {
     d.step(11, 'opposing_factors', 'fail', 'opposing ${pyFixed(oppScore, 2)} ≥ supporting ${pyFixed(supScore, 2)}');
     d.reasonCodes.add('opposing_factors_dominate');
     return d;
+  } else {
+    d.step(11, 'opposing_factors', 'ok', 'supporting ${pyFixed(supScore, 2)} vs opposing ${pyFixed(oppScore, 2)}');
   }
-  d.step(11, 'opposing_factors', 'ok', 'supporting ${pyFixed(supScore, 2)} vs opposing ${pyFixed(oppScore, 2)}');
 
   // 12 — opportunity quality (internal estimate, NOT a probability of profit)
   final agreement = supScore + oppScore > 0 ? supScore / (supScore + oppScore) : 0.0;
   final confidence = roundTo(0.5 * agreement + 0.3 * (d.dataQuality ?? 0) + 0.2 * math.min(1.0, sup.length / 6), 3);
   d.confidence = confidence;
   final minConf = _num(settings['min_confidence_to_signal']);
-  if (confidence < minConf) {
+  if (strategyOnly) {
+    d.step(12, 'opportunity_quality', 'info', 'estimate ${pyFixed(confidence, 2)} (uncalibrated; not required)');
+  } else if (confidence < minConf) {
     d.step(12, 'opportunity_quality', 'fail', 'estimate ${pyFixed(confidence, 2)} < ${pyFixed(minConf, 2)}');
     d.reasonCodes.add('low_confidence');
     return d;
+  } else {
+    d.step(12, 'opportunity_quality', 'ok', 'estimate ${pyFixed(confidence, 2)} (uncalibrated)');
   }
-  d.step(12, 'opportunity_quality', 'ok', 'estimate ${pyFixed(confidence, 2)} (uncalibrated)');
 
   // 13 — duration: the tested duration, within the user's range
   final def = chosen['definition'] as Map;

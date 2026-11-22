@@ -55,6 +55,9 @@ class Settings(BaseModel):
     min_confidence_to_signal: float = Field(0.65, ge=0.5, le=0.95)
     min_data_quality_to_signal: float = Field(0.6, ge=0.3, le=1.0)
     min_confluence_factors: int = Field(3, ge=2, le=10)  # never a single-indicator signal
+    # opt-in: signal on an approved, tested strategy's own conditions (exactly as backtested); the factor
+    # agreement is then shown but not required (its filter was never part of the backtest)
+    strategy_only_signals: bool = False
     signal_cooldown_sec: int = Field(30, ge=0, le=3600)   # no repeat without new analysis
 
     # --- indicators (section 6) — each one can be switched on/off

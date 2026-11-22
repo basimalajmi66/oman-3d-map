@@ -61,6 +61,9 @@ class FeatureSet {
   final pivHi = <int>[], pivLo = <int>[];
   final Map<int, List<LevelT>> _levelsCache = {};
 
+  /// Public form of [_confirmed] for chart patterns.
+  List<int> confirmed(List<int> pivs, int i, [int last = 30]) => _confirmed(pivs, i, last);
+
   /// The last `last` pivots confirmed at bar i (j + K <= i). `pivs` is sorted → binary search.
   List<int> _confirmed(List<int> pivs, int i, [int last = 30]) {
     final limit = i - pivotK;

@@ -3,6 +3,7 @@
 /// Anything that cannot be expressed here is reported as *untestable* instead of being guessed.
 library;
 
+import 'chart_patterns.dart';
 import 'features.dart';
 
 typedef Cond = Map<String, dynamic>;
@@ -83,6 +84,8 @@ final Map<String, CondSpec> catalog = {
   'breakdown': CondSpec({}, 'كسر دعم', 'breakdown below a level', (fs, i, p) => _breakout(fs, i, false)),
   'pattern': CondSpec({'name': 'bullish_engulfing'}, 'نمط {name}', 'pattern {name}',
       (fs, i, p) => fs.patterns(i).contains(p['name'])),
+  'chart_pattern': CondSpec({'name': 'double_bottom'}, 'كسر نموذج {name}', '{name} break',
+      (fs, i, p) => chartPatterns[p['name']]!(fs, i)),
   'market': CondSpec({'condition': 'trending'}, 'سوق {condition}', 'market {condition}',
       (fs, i, p) => fs.marketCondition(i) == p['condition']),
   'bullish_candle': CondSpec({}, 'شمعة صاعدة', 'bullish candle', (fs, i, p) => fs.c[i] > fs.o[i]),
@@ -137,6 +140,9 @@ Cond validate(Map cond) {
   final unknown = params.keys.toSet().difference(spec.params.keys.toSet()).toList()..sort();
   if (unknown.isNotEmpty) throw StrategyError('unknown parameters for $cid: $unknown');
   if (cid == 'pattern' && !patternNames.contains(params['name'])) throw StrategyError("unknown pattern '${params['name']}'");
+  if (cid == 'chart_pattern' && !chartPatternNames.contains(params['name'])) {
+    throw StrategyError("unknown chart pattern '${params['name']}'");
+  }
   if (cid == 'market' && !const ['trending', 'ranging', 'volatile'].contains(params['condition'])) {
     throw StrategyError('market condition must be trending, ranging or volatile');
   }
@@ -173,7 +179,14 @@ Map<String, dynamic> validateDefinition(Map d) {
 
 bool holds(FeatureSet fs, int i, Cond cond) => catalog[cond['id']]!.fn(fs, i, cond);
 
+const _chartPatternAr = {
+  'double_top': 'القمة المزدوجة (بيع)', 'double_bottom': 'القاع المزدوج (شراء)', 'head_shoulders': 'الرأس والكتفين (بيع)', //
+  'bull_flag': 'العلم الصاعد (شراء)', 'ascending_triangle': 'المثلث الصاعد (شراء)',
+  'gap_retest_bull': 'الفجوة الصاعدة: عودة السعر إليها (شراء)', 'gap_retest_bear': 'الفجوة الهابطة: عودة السعر إليها (بيع)',
+};
+
 String describe(Cond cond, [String lang = 'en']) {
+  if (lang == 'ar' && cond['id'] == 'chart_pattern') return 'كسر نموذج ${_chartPatternAr[cond['name']] ?? cond['name']}';
   var tpl = lang == 'ar' ? catalog[cond['id']]!.ar : catalog[cond['id']]!.en;
   for (final e in cond.entries) {
     if (e.key != 'id') tpl = tpl.replaceAll('{${e.key}}', '${e.value}');
@@ -182,7 +195,7 @@ String describe(Cond cond, [String lang = 'en']) {
 }
 
 const _expensive = {
-  'near_support': 3, 'near_resistance': 3, 'breakout_up': 3, 'breakdown': 3, 'pattern': 2, //
+  'near_support': 3, 'near_resistance': 3, 'breakout_up': 3, 'breakdown': 3, 'pattern': 2, 'chart_pattern': 3, //
   'trend_up': 2, 'trend_down': 2, 'trend_sideways': 2, 'market': 2,
 };
 

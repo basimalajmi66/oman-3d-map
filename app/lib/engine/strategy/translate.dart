@@ -83,9 +83,36 @@ const conceptMap = <String, Map<String, List<Map<String, dynamic>>>>{
     'short': [{'id': 'market', 'condition': 'volatile'}]
   },
   'candle_close': {'long': [], 'short': []}, // every condition is already evaluated on a closed candle
+  'double_top': {
+    'long': [],
+    'short': [{'id': 'chart_pattern', 'name': 'double_top'}]
+  },
+  'double_bottom': {
+    'long': [{'id': 'chart_pattern', 'name': 'double_bottom'}],
+    'short': []
+  },
+  'head_shoulders': {
+    'long': [],
+    'short': [{'id': 'chart_pattern', 'name': 'head_shoulders'}]
+  },
+  'bull_flag': {
+    'long': [{'id': 'chart_pattern', 'name': 'bull_flag'}],
+    'short': []
+  },
+  'ascending_triangle': {
+    'long': [{'id': 'chart_pattern', 'name': 'ascending_triangle'}],
+    'short': []
+  },
+  'gap_retest': {
+    'long': [{'id': 'chart_pattern', 'name': 'gap_retest_bull'}],
+    'short': [{'id': 'chart_pattern', 'name': 'gap_retest_bear'}]
+  },
 };
 
-const untestableConcepts = {'news', 'liquidity', 'supply_demand', 'volume', 'atr', 'pin_bar', 'double_top', 'double_bottom'};
+const untestableConcepts = {'news', 'liquidity', 'supply_demand', 'volume', 'atr', 'pin_bar'};
+
+/// A chart pattern's own break replaces the generic "breakout above/below a level".
+const patternConcepts = {'double_top', 'double_bottom', 'head_shoulders', 'bull_flag', 'ascending_triangle', 'gap_retest'};
 
 List<Map<String, dynamic>> _dedup(List<Map<String, dynamic>> conds) {
   final seen = <String>{};
@@ -103,7 +130,8 @@ Map<String, dynamic> translateRules(List<Map<String, dynamic>> rules, {int durat
   final untestable = <String>[], used = <String>[];
   for (final r in rules) {
     final acts = {...(r['actions'] as List? ?? const [])};
-    final concepts = {...(r['conditions'] as List? ?? const []).cast<String>()}.toList()..sort();
+    var concepts = {...(r['conditions'] as List? ?? const []).cast<String>()}.toList()..sort();
+    if (concepts.any(patternConcepts.contains)) concepts = [for (final c in concepts) if (c != 'breakout' && c != 'trend') c];
     final bad = concepts.where((c) => untestableConcepts.contains(c) || !conceptMap.containsKey(c));
     if (bad.isNotEmpty || concepts.isEmpty) {
       untestable.add(r['text'] as String);
@@ -114,6 +142,15 @@ Map<String, dynamic> translateRules(List<Map<String, dynamic>> rules, {int durat
     } else if (acts.contains('act_buy') && !acts.contains('act_sell')) {
       longC.addAll([for (final k in concepts) ...conceptMap[k]!['long']!]);
     } else if (acts.contains('act_sell') && !acts.contains('act_buy')) {
+      shortC.addAll([for (final k in concepts) ...conceptMap[k]!['short']!]);
+    } else if (acts.length == 1 &&
+        acts.contains('act_enter') &&
+        concepts.every((k) =>
+            conceptMap[k]!['long']!.isNotEmpty &&
+            conceptMap[k]!['short']!.isNotEmpty &&
+            jsonEncode(conceptMap[k]!['long']) != jsonEncode(conceptMap[k]!['short']))) {
+      // "enter" without a side, on a setup that has a side of its own (gap retest: with the move)
+      longC.addAll([for (final k in concepts) ...conceptMap[k]!['long']!]);
       shortC.addAll([for (final k in concepts) ...conceptMap[k]!['short']!]);
     } else {
       untestable.add(r['text'] as String); // exit-only or ambiguous direction

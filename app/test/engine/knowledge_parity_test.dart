@@ -23,6 +23,14 @@ const texts = [
   'نموذج الابتلاعية الشرائية عند الدعم إشارة قوية. وإذا ظهرت نجمة الصباح بعد هبوط فادخل شراء ٣ دقائق.',
   'Bollinger bands squeeze then breakout; ٥ دقائق. avoid trading during news.',
   'Moving averages: EMA 50 above SMA 200 means uptrend. Do not enter against the trend.',
+  // spoken videos: the pattern is named in one sentence, "it breaks" in a later one
+  'Number one, the double top. Price hits the same high twice and fails. When it breaks the neckline, sellers take over. '
+      'Number three, head and shoulders. Three peaks, the middle one, the highest. Once the neckline breaks, the trend is done. '
+      'Number four, the bull flag, a strong move up, Then a small pullback. When it breaks out, the move continues. '
+      'Number five, the ascending triangle, flat top, higher lows. Buyers keep pushing until the top finally breaks.',
+  'You should never enter after this move. When price moves that fast, it creates an imbalance. '
+      'We simply wait for price to reach the gap and then we enter with confidence.',
+  'القمة المزدوجة. عندما يكسر السعر خط العنق بع لمدة دقيقتين. انتظر وصول السعر إلى الفجوة ثم ادخل.',
 ];
 
 void main() {

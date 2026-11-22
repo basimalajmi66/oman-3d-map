@@ -21,6 +21,7 @@ from typing import Any, Callable
 import numpy as np
 
 from uata.analysis.patterns import detect_at  # noqa: F401  (documented dependency)
+from uata.strategy.chart_patterns import CHART_PATTERNS
 from uata.strategy.features import FeatureSet
 
 PATTERNS = ("hammer", "hanging_man", "shooting_star", "inverted_hammer", "doji", "marubozu",
@@ -99,6 +100,8 @@ CATALOG: dict[str, dict[str, Any]] = {
                   "fn": lambda fs, i, p: _breakout(fs, i, False)},
     "pattern": {"params": {"name": "bullish_engulfing"}, "ar": "نمط {name}", "en": "pattern {name}",
                 "fn": lambda fs, i, p: p["name"] in fs.patterns(i)},
+    "chart_pattern": {"params": {"name": "double_bottom"}, "ar": "كسر نموذج {name}", "en": "{name} break",
+                      "fn": lambda fs, i, p: CHART_PATTERNS[p["name"]](fs, i)},
     "market": {"params": {"condition": "trending"}, "ar": "سوق {condition}", "en": "market {condition}",
                "fn": lambda fs, i, p: fs.market_condition(i) == p["condition"]},
     "bullish_candle": {"params": {}, "ar": "شمعة صاعدة", "en": "bullish candle", "fn": lambda fs, i, p: fs.c[i] > fs.o[i]},
@@ -157,6 +160,8 @@ def validate(cond: dict) -> dict:
         raise ValueError(f"unknown parameters for {cid}: {sorted(unknown)}")
     if cid == "pattern" and params["name"] not in PATTERNS:
         raise ValueError(f"unknown pattern '{params['name']}'")
+    if cid == "chart_pattern" and params["name"] not in CHART_PATTERNS:
+        raise ValueError(f"unknown chart pattern '{params['name']}'")
     if cid == "market" and params["condition"] not in ("trending", "ranging", "volatile"):
         raise ValueError("market condition must be trending, ranging or volatile")
     if cid in ("price_above_ema", "price_below_ema") and params["period"] not in EMA_PERIODS:
@@ -192,7 +197,7 @@ def describe(cond: dict, lang: str = "en") -> str:
     return tpl.format(**{k: v for k, v in cond.items() if k != "id"})
 
 
-EXPENSIVE = {"near_support": 3, "near_resistance": 3, "breakout_up": 3, "breakdown": 3, "pattern": 2,
+EXPENSIVE = {"near_support": 3, "near_resistance": 3, "breakout_up": 3, "breakdown": 3, "pattern": 2, "chart_pattern": 3,
              "trend_up": 2, "trend_down": 2, "trend_sideways": 2, "market": 2}
 
 

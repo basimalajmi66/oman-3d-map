@@ -216,6 +216,20 @@ const Map<String, Map<String, String>> _strings = {
   'strategy_untestable': {'ar': 'لا يمكن اختباره', 'en': 'Cannot be tested'},
   'strategy_nothing_testable': {'ar': 'لم أجد شروطاً قابلة للاختبار. استخدم كلمات مثل: RSI، تشبع بيعي/شرائي، دعم/مقاومة، اتجاه صاعد/هابط، تقاطع MACD، بولينجر، اختراق، زخم، ابتلاع، مطرقة، دوجي — مع «شراء» أو «بيع».', 'en': 'No testable conditions found. Use words like RSI, oversold/overbought, support/resistance, uptrend/downtrend, MACD cross, Bollinger, breakout, momentum, engulfing, hammer, doji — with "buy" or "sell".'},
   'strategy_no_data_for_tf': {'ar': 'لا توجد أسعار تاريخية لهذا الإطار الزمني لاختبارها — شغّل «البدء السريع» أولاً ثم افتح الاستراتيجية واضغط «اختبار»', 'en': 'No price history for this timeframe to test on — run quick start first, then open the strategy and press "Backtest"'},
+  'strategy_only': {'ar': 'اعتماد شروط الاستراتيجية وحدها', 'en': 'Strategy conditions alone'},
+  'strategy_only_hint': {
+    'ar': 'الإشارة تظهر متى تحققت شروط استراتيجية معتمدة ومختبرة، كما اختُبرت تماماً. توافق العوامل الأخرى يُعرض في التفاصيل ولا يُشترط. التنفيذ يبقى يدوياً.',
+    'en': 'A signal appears whenever an approved, tested strategy fires, exactly as it was backtested. Agreement of the other factors is shown in the details but not required. Execution stays manual.'
+  },
+  'rules_how_title': {'ar': 'كيف أنشئ الاستراتيجية؟', 'en': 'How should the strategy be made?'},
+  'rules_how_body': {
+    'ar': 'لديك أكثر من قاعدة معتمدة. «منفصلة»: كل قاعدة استراتيجية مستقلة تُختبر وحدها (الأنسب لفيديو يشرح عدة نماذج). «مجمعة»: استراتيجية واحدة يجب أن تتحقق فيها كل الشروط معاً.',
+    'en': 'You have several approved rules. "Separate": each rule becomes its own strategy, tested on its own (best for a video that explains several patterns). "Combined": one strategy where every condition must hold together.'
+  },
+  'rules_separate': {'ar': 'منفصلة', 'en': 'Separate'},
+  'rules_combined': {'ar': 'مجمعة', 'en': 'Combined'},
+  'strategies_created': {'ar': 'الاستراتيجيات التي أُنشئت واختُبرت', 'en': 'Strategies created and tested'},
+  'not_tested': {'ar': 'لم تُختبر بعد (لا توجد بيانات أسعار لهذا الإطار)', 'en': 'Not tested yet (no price data for this timeframe)'},
   'full_transcript': {'ar': 'النص الكامل للفيديو (نسخ)', 'en': 'Full transcript (copy)'},
   'full_text': {'ar': 'النص الكامل المقروء (نسخ)', 'en': 'Full text read (copy)'},
   'copy_all': {'ar': 'نسخ الكل', 'en': 'Copy all'},

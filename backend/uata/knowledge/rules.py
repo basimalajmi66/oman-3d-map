@@ -40,23 +40,54 @@ class CandidateRule:
         return asdict(self)
 
 
+# chart patterns have a direction of their own: "when the neckline breaks" after "head and shoulders" means sell
+CHART_PATTERN_SIDE = {"double_top": "act_sell", "double_bottom": "act_buy", "head_shoulders": "act_sell",
+                      "bull_flag": "act_buy", "ascending_triangle": "act_buy"}
+CONTEXT_SENTENCES = 3  # a pattern named in one of the previous sentences is what "it" refers to
+# "wait for the price to reach the gap, then enter" is a conditional ENTRY, not a no-trade rule
+WAIT_THEN_ENTER = re.compile(r"\bwait (?:for|until)\b.*\benter\b|(?<![؀-ۿ])انتظر(?![؀-ۿ]).*(?<![؀-ۿ])(?:ثم )?ادخل(?![؀-ۿ])")
+
+
 def extract_rules(text: str, location: str = "") -> list[CandidateRule]:
     out = []
+    context: tuple[str, str] | None = None  # (pattern concept, the sentence that named it)
+    age = 0
     for sent in SENTENCE_SPLIT.split(text):
         s = sent.strip(" -•*\t")
+        cs = concepts(s) if s else set()
+        named = sorted(c for c in cs if c in CHART_PATTERN_SIDE)
+        if named:
+            context, age = (named[0], s), 0
+        else:
+            age += 1
+            if age > CONTEXT_SENTENCES:
+                context = None
         if len(s) < 12 or len(s) > 400:
             continue
-        if not CONDITION_MARKERS.search(normalize(s)) and not CONDITION_MARKERS.search(s):
+        wait_enter = bool(WAIT_THEN_ENTER.search(normalize(s)))
+        marker = CONDITION_MARKERS.search(normalize(s)) or CONDITION_MARKERS.search(s) or wait_enter
+        carried = not named and context is not None and "breakout" in cs
+        if not marker and not carried:
             continue
-        cs = concepts(s)
+        text_out = s
+        if carried:
+            cs = cs | {context[0]}
+            text_out = f"{context[1]} {s}"
         acts = sorted(c for c in cs if c in ACTIONS)
+        if wait_enter and "act_avoid" in acts:
+            acts.remove("act_avoid")
+            if "act_enter" not in acts:
+                acts = sorted(acts + ["act_enter"])
         if "act_avoid" in acts and "act_enter" in acts:
             acts.remove("act_enter")  # "do not enter" / "لا تدخل" is a no-entry rule, not an entry
+        pats = sorted(c for c in cs if c in CHART_PATTERN_SIDE)
+        if not acts and len(pats) == 1 and "breakout" in cs:
+            acts = [CHART_PATTERN_SIDE[pats[0]]]
         if not acts:
             continue
         conds = sorted(c for c in cs if c not in ACTIONS)
         tfs = [m.group(0) for m in TF_RE.finditer(normalize(s))]
-        out.append(CandidateRule(s, acts, conds, tfs, location))
+        out.append(CandidateRule(text_out, acts, conds, tfs, location))
     return out
 
 

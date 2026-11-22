@@ -40,19 +40,54 @@ String _strip(String s, String chars) {
   return s.substring(a, b);
 }
 
+/// Chart patterns have a direction of their own: "when the neckline breaks" after "head and shoulders" means sell.
+const chartPatternSide = {
+  'double_top': 'act_sell', 'double_bottom': 'act_buy', 'head_shoulders': 'act_sell', //
+  'bull_flag': 'act_buy', 'ascending_triangle': 'act_buy',
+};
+const _contextSentences = 3; // a pattern named in one of the previous sentences is what "it" refers to
+/// "wait for the price to reach the gap, then enter" is a conditional ENTRY, not a no-trade rule.
+final _waitThenEnter = RegExp(
+    '(?<![$_w])wait (?:for|until)(?![$_w]).*(?<![$_w])enter(?![$_w])|(?<![؀-ۿ])انتظر(?![؀-ۿ]).*(?<![؀-ۿ])(?:ثم )?ادخل(?![؀-ۿ])',
+    unicode: true);
+
 List<CandidateRule> extractRules(String text, [String location = '']) {
   final out = <CandidateRule>[];
+  (String, String)? context; // (pattern concept, the sentence that named it)
+  var age = 0;
   for (final sent in text.split(sentenceSplit)) {
     final s = _strip(sent, ' -•*\t');
+    var cs = s.isEmpty ? <String>{} : concepts(s);
+    final named = cs.where(chartPatternSide.containsKey).toList()..sort();
+    if (named.isNotEmpty) {
+      context = (named.first, s);
+      age = 0;
+    } else {
+      age++;
+      if (age > _contextSentences) context = null;
+    }
     if (s.length < 12 || s.length > 400) continue;
-    if (!conditionMarkers.hasMatch(normalize(s)) && !conditionMarkers.hasMatch(s)) continue;
-    final cs = concepts(s);
-    final acts = cs.where(actions.contains).toList()..sort();
+    final waitEnter = _waitThenEnter.hasMatch(normalize(s));
+    final marker = conditionMarkers.hasMatch(normalize(s)) || conditionMarkers.hasMatch(s) || waitEnter;
+    final carried = named.isEmpty && context != null && cs.contains('breakout');
+    if (!marker && !carried) continue;
+    var textOut = s;
+    if (carried) {
+      cs = {...cs, context.$1};
+      textOut = '${context.$2} $s';
+    }
+    var acts = cs.where(actions.contains).toList()..sort();
+    if (waitEnter && acts.contains('act_avoid')) {
+      acts.remove('act_avoid');
+      if (!acts.contains('act_enter')) acts = [...acts, 'act_enter']..sort();
+    }
     if (acts.contains('act_avoid') && acts.contains('act_enter')) acts.remove('act_enter'); // "do not enter"
+    final pats = cs.where(chartPatternSide.containsKey).toList();
+    if (acts.isEmpty && pats.length == 1 && cs.contains('breakout')) acts = [chartPatternSide[pats.first]!];
     if (acts.isEmpty) continue;
     final conds = cs.where((c) => !actions.contains(c)).toList()..sort();
     final tfs = [for (final m in tfRe.allMatches(normalize(s))) m[0]!];
-    out.add(CandidateRule(s, acts, conds, tfs, location));
+    out.add(CandidateRule(textOut, acts, conds, tfs, location));
   }
   return out;
 }

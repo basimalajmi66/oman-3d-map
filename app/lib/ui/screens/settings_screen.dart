@@ -285,7 +285,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _dropdown<int>('trade_duration_min_sec', app.t('min_duration'), _durations, (v) => '$v$secs'),
         _dropdown<int>('trade_duration_max_sec', app.t('max_duration'), _durations, (v) => '$v$secs'),
         _dropdown<int>('signal_cooldown_sec', app.t('cooldown'), _cooldowns, (v) => '$v$secs'),
-        _dropdown<int>('min_confluence_factors', app.t('min_factors'), const [2, 3, 4, 5, 6], (v) => '$v'),
+        SwitchListTile(
+          key: const Key('sw_strategy_only'),
+          title: Text(app.t('strategy_only')),
+          subtitle: Text(app.t('strategy_only_hint'), style: const TextStyle(fontSize: 12)),
+          value: s['strategy_only_signals'] == true,
+          onChanged: (v) => _set('strategy_only_signals', v),
+        ),
+        if (s['strategy_only_signals'] != true)
+          _dropdown<int>('min_confluence_factors', app.t('min_factors'), const [2, 3, 4, 5, 6], (v) => '$v'),
         _slider('min_confidence_to_signal', app.t('min_conf'), 0.5, 0.95, 9),
         _slider('min_data_quality_to_signal', app.t('min_quality'), 0.3, 1.0, 14),
         SwitchListTile(

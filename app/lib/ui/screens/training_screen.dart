@@ -1,6 +1,8 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../engine/strategy/chart_patterns.dart' show chartPatternNames;
+import '../../engine/strategy/conditions.dart' as cnd;
 import '../../core/engine_api.dart';
 import '../../engine/local/local_engine_api.dart' show LocalEngineApi;
 import '../../engine/strategy/from_text.dart';
@@ -67,6 +69,54 @@ class TrainingScreen extends StatelessWidget {
 
 /// Create a strategy, test it right away on real prices of the timeframe in use, and open its page (results and
 /// the approve button). Used by "new strategy" (own words) and by the library (approved rules).
+/// Several rules (e.g. five chart patterns from one video) as SEPARATE strategies: each is created and tested on
+/// the latest real data, then one list shows every result (out-of-sample win rate) with a tap to open each.
+Future<void> createTestSeveral(BuildContext context, AppState app, List<(String, Json)> strategies) async {
+  final tf = app.settings['candle_timeframe_sec'];
+  final data = [for (final d in await app.engine.listDatasets()) if (d['timeframe_sec'] == tf && d['is_synthetic'] != 1) d]
+    ..sort((a, b) => (b['id'] as int).compareTo(a['id'] as int));
+  final made = <Json>[];
+  if (!context.mounted) return;
+  await runWithFeedback(context, () async {
+    for (final (name, def) in strategies) {
+      final s = await app.engine.createStrategy(name, def);
+      if (data.isNotEmpty) await app.engine.backtest(s['id'] as int, data.first['id'] as int);
+      made.add(await app.engine.getStrategy(s['id'] as int));
+    }
+  });
+  if (!context.mounted || made.isEmpty) return;
+  if (data.isEmpty) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.t('strategy_no_data_for_tf'))));
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(app.t('strategies_created')),
+      content: SizedBox(
+        width: 520,
+        child: ListView(shrinkWrap: true, children: [
+          for (final s in made)
+            Builder(builder: (_) {
+              final oos = ((s['latest_backtest'] as Map?)?['out_of_sample'] as Map?) ?? const {};
+              final wr = oos['win_rate'] as num?;
+              return ListTile(
+                key: Key('made_${s['id']}'),
+                title: Text('${s['name']}'),
+                subtitle: Text(oos.isEmpty
+                    ? app.t('not_tested')
+                    : '${app.t('trades')}: ${oos['trades']} · ${app.t('win_rate')}: ${wr == null ? '—' : '${(wr * 100).round()}%'}'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => StrategyPage(strategyId: s['id'] as int)));
+                },
+              );
+            }),
+        ]),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(app.t('close')))],
+    ),
+  );
+}
+
 Future<void> createTestAndOpen(BuildContext context, AppState app, String name, Json definition) async {
   Json? s;
   final ok = await runWithFeedback(context, () async => s = await app.engine.createStrategy(name, definition));
@@ -459,6 +509,7 @@ class _StrategyBuilderState extends State<_StrategyBuilder> {
   }
 
   String _label(Json c) {
+    if (c['id'] == 'chart_pattern') return cnd.describe({'name': 'double_bottom', ...c}, widget.app.lang);
     final spec = _catalog.firstWhere((x) => x['id'] == c['id'], orElse: () => {'en': c['id'], 'ar': c['id']});
     var tpl = '${spec[widget.app.lang]}';
     c.forEach((k, v) => tpl = tpl.replaceAll('{$k}', '$v'));
@@ -467,20 +518,25 @@ class _StrategyBuilderState extends State<_StrategyBuilder> {
   }
 
   Future<void> _add(String side) async {
-    final id = await showDialog<String>(
+    final picked = await showDialog<Json>(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: Text(widget.app.t('add_condition')),
-        children: _catalog
-            .map((c) => SimpleDialogOption(
-                  key: Key('cond_${c['id']}'),
-                  onPressed: () => Navigator.pop(ctx, c['id'] as String),
-                  child: Text(_label({'id': c['id']})),
-                ))
-            .toList(),
+        children: [
+          for (final c in _catalog)
+            // every chart pattern is its own choice (the plain entry would only ever add the default one)
+            for (final cond in c['id'] == 'chart_pattern'
+                ? [for (final n in chartPatternNames) <String, dynamic>{'id': 'chart_pattern', 'name': n}]
+                : [<String, dynamic>{'id': c['id']}])
+              SimpleDialogOption(
+                key: Key('cond_${cond['id']}${cond['name'] != null ? '_${cond['name']}' : ''}'),
+                onPressed: () => Navigator.pop(ctx, cond),
+                child: Text(_label(cond)),
+              ),
+        ],
       ),
     );
-    if (id != null) setState(() => _conds[side]!.add({'id': id}));
+    if (picked != null) setState(() => _conds[side]!.add(picked));
   }
 
   @override

@@ -224,6 +224,15 @@ void main() {
     await tester.pumpAndSettle();
     expect((e.settings['indicators'] as Map)['rsi'], false);
 
+    // "strategy conditions alone": off by default; turning it on hides the minimum-factors choice
+    final only = find.byKey(const Key('sw_strategy_only'));
+    await tester.scrollUntilVisible(only, 300);
+    expect(find.text(tr('ar', 'min_factors')), findsOneWidget);
+    await tester.tap(only);
+    await tester.pumpAndSettle();
+    expect(e.settings['strategy_only_signals'], true);
+    expect(find.text(tr('ar', 'min_factors')), findsNothing);
+
     final screenSwitch = find.byKey(const Key('sw_screen'));
     await tester.scrollUntilVisible(screenSwitch, 300);
     await tester.tap(screenSwitch);

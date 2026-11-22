@@ -184,25 +184,33 @@ def decide(reading: dict, technical: dict, settings: dict, strategies: list[dict
     d.opposing = [f"{f['name']}: {f['code']}" for f in opp]
     sup_score, opp_score = sum(f["strength"] for f in sup), sum(f["strength"] for f in opp)
     need = settings["min_confluence_factors"]
-    if len(sup) < need:
+    strategy_only = bool(settings.get("strategy_only_signals", False))
+    if strategy_only:
+        d.step(11, "opposing_factors", "info",
+               f"strategy conditions alone: supporting {sup_score:.2f} vs opposing {opp_score:.2f} (shown, not required)")
+    elif len(sup) < need:
         d.step(11, "opposing_factors", "fail", f"{len(sup)} supporting < {need} required")
         d.reason_codes.append("insufficient_confluence")
         return d
-    if opp_score >= sup_score:
+    elif opp_score >= sup_score:
         d.step(11, "opposing_factors", "fail", f"opposing {opp_score:.2f} ≥ supporting {sup_score:.2f}")
         d.reason_codes.append("opposing_factors_dominate")
         return d
-    d.step(11, "opposing_factors", "ok", f"supporting {sup_score:.2f} vs opposing {opp_score:.2f}")
+    else:
+        d.step(11, "opposing_factors", "ok", f"supporting {sup_score:.2f} vs opposing {opp_score:.2f}")
 
     # 12 — opportunity quality (internal estimate, NOT a probability of profit)
     agreement = sup_score / (sup_score + opp_score) if (sup_score + opp_score) else 0.0
     confidence = round(0.5 * agreement + 0.3 * float(d.data_quality or 0) + 0.2 * min(1.0, len(sup) / 6), 3)
     d.confidence = confidence
-    if confidence < settings["min_confidence_to_signal"]:
+    if strategy_only:
+        d.step(12, "opportunity_quality", "info", f"estimate {confidence:.2f} (uncalibrated; not required)")
+    elif confidence < settings["min_confidence_to_signal"]:
         d.step(12, "opportunity_quality", "fail", f"estimate {confidence:.2f} < {settings['min_confidence_to_signal']:.2f}")
         d.reason_codes.append("low_confidence")
         return d
-    d.step(12, "opportunity_quality", "ok", f"estimate {confidence:.2f} (uncalibrated)")
+    else:
+        d.step(12, "opportunity_quality", "ok", f"estimate {confidence:.2f} (uncalibrated)")
 
     # 13 — duration: the tested duration, within the user's range
     dur = int(chosen["definition"]["duration_sec"])

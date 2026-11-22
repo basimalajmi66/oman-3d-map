@@ -6,7 +6,7 @@ import '../../core/engine_api.dart';
 import '../../engine/strategy/from_text.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
-import 'training_screen.dart' show createTestAndOpen;
+import 'training_screen.dart' show createTestAndOpen, createTestSeveral;
 import 'learning_reports_screen.dart';
 import 'videos_screen.dart';
 
@@ -176,8 +176,36 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.t('strategy_nothing_testable'))));
       return;
     }
-    await createTestAndOpen(context, app, '${source['title'] ?? app.t('library')} (${app.t('library')})',
-        {...def, 'untestable': untestable});
+    final title = '${source['title'] ?? app.t('library')}';
+    // each approved rule on its own — e.g. five chart patterns are five different trades, not one trade needing all five
+    final single = <(String, Json)>[];
+    for (final it in items) {
+      if (it['item_type'] != 'rule' || it['status'] != 'approved') continue;
+      final (d, u, _) = strategyFromText((it['content'] as String? ?? '').trim());
+      if (u.isNotEmpty) single.add(('$title — ${single.length + 1}', d));
+    }
+    var separate = false;
+    if (single.length > 1) {
+      final choice = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(app.t('rules_how_title')),
+          content: Text(app.t('rules_how_body')),
+          actions: [
+            TextButton(key: const Key('rules_combined'), onPressed: () => Navigator.pop(ctx, false), child: Text(app.t('rules_combined'))),
+            FilledButton(key: const Key('rules_separate'), onPressed: () => Navigator.pop(ctx, true),
+                child: Text('${app.t('rules_separate')} (${single.length})')),
+          ],
+        ),
+      );
+      if (choice == null || !mounted) return;
+      separate = choice;
+    }
+    if (separate) {
+      await createTestSeveral(context, app, single);
+      return;
+    }
+    await createTestAndOpen(context, app, '$title (${app.t('library')})', {...def, 'untestable': untestable});
   }
 
   Future<void> _decide(Json item, String decision) async {

@@ -31,9 +31,18 @@ CONCEPT_MAP: dict[str, dict[str, list[dict]]] = {
     "breakout": {"long": [{"id": "breakout_up"}], "short": [{"id": "breakdown"}]},
     "momentum": {"long": [{"id": "momentum_up"}], "short": [{"id": "momentum_down"}]},
     "volatility": {"long": [{"id": "market", "condition": "volatile"}], "short": [{"id": "market", "condition": "volatile"}]},
-    "candle_close": {"long": [], "short": []},  # every condition is already evaluated on a closed candle
+    "candle_close": {"long": [], "short": []},
+    "double_top": {"long": [], "short": [{"id": "chart_pattern", "name": "double_top"}]},
+    "double_bottom": {"long": [{"id": "chart_pattern", "name": "double_bottom"}], "short": []},
+    "head_shoulders": {"long": [], "short": [{"id": "chart_pattern", "name": "head_shoulders"}]},
+    "bull_flag": {"long": [{"id": "chart_pattern", "name": "bull_flag"}], "short": []},
+    "ascending_triangle": {"long": [{"id": "chart_pattern", "name": "ascending_triangle"}], "short": []},
+    "gap_retest": {"long": [{"id": "chart_pattern", "name": "gap_retest_bull"}],
+                   "short": [{"id": "chart_pattern", "name": "gap_retest_bear"}]},  # every condition is already evaluated on a closed candle
 }
-UNTESTABLE = {"news", "liquidity", "supply_demand", "volume", "atr", "pin_bar", "double_top", "double_bottom"}
+UNTESTABLE = {"news", "liquidity", "supply_demand", "volume", "atr", "pin_bar"}
+# a chart pattern's own break replaces the generic "breakout above/below a level"
+PATTERN_CONCEPTS = {"double_top", "double_bottom", "head_shoulders", "bull_flag", "ascending_triangle", "gap_retest"}
 
 
 def _dedup(conds: list[dict]) -> list[dict]:
@@ -52,6 +61,8 @@ def translate_rules(rules: list[dict], duration_sec: int = 120) -> dict:
     for r in rules:
         acts = set(r.get("actions", []))
         concepts = sorted(set(r.get("conditions", [])))  # deterministic order
+        if PATTERN_CONCEPTS & set(concepts):
+            concepts = [c for c in concepts if c not in ("breakout", "trend")]
         bad = (set(concepts) & UNTESTABLE) | {c for c in concepts if c not in CONCEPT_MAP and c not in UNTESTABLE}
         if bad or not concepts:
             untestable.append(r["text"])
@@ -62,6 +73,11 @@ def translate_rules(rules: list[dict], duration_sec: int = 120) -> dict:
         elif "act_buy" in acts and "act_sell" not in acts:
             long_c += [c for k in concepts for c in CONCEPT_MAP[k]["long"]]
         elif "act_sell" in acts and "act_buy" not in acts:
+            short_c += [c for k in concepts for c in CONCEPT_MAP[k]["short"]]
+        elif acts == {"act_enter"} and all(CONCEPT_MAP[k]["long"] and CONCEPT_MAP[k]["short"]
+                                           and CONCEPT_MAP[k]["long"] != CONCEPT_MAP[k]["short"] for k in concepts):
+            # "enter" without a side, on a setup that has a side of its own (gap retest: with the move)
+            long_c += [c for k in concepts for c in CONCEPT_MAP[k]["long"]]
             short_c += [c for k in concepts for c in CONCEPT_MAP[k]["short"]]
         else:
             untestable.append(r["text"])  # exit-only or ambiguous direction

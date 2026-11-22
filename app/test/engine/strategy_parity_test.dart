@@ -6,6 +6,7 @@ import 'package:uata_app/engine/analysis/analyzer.dart';
 import 'package:uata_app/engine/signal/decision.dart';
 import 'package:uata_app/engine/strategy/backtest.dart';
 import 'package:uata_app/engine/strategy/conditions.dart' as cd;
+import 'package:uata_app/engine/strategy/chart_patterns.dart' show chartPatternNames;
 import 'package:uata_app/engine/strategy/features.dart';
 import 'package:uata_app/engine/strategy/translate.dart';
 
@@ -31,6 +32,9 @@ final params = <String, List<Map<String, dynamic>>>{
   'near_resistance': [{}, {'atr': 1.5}],
   'pattern': [
     for (final p in cd.patternNames) {'name': p}
+  ],
+  'chart_pattern': [
+    for (final p in chartPatternNames) {'name': p}
   ],
   'market': [{'condition': 'trending'}, {'condition': 'ranging'}, {'condition': 'volatile'}],
   'momentum_up': [{}, {'atr': 0.5}],
@@ -170,6 +174,13 @@ void main() {
       {'reading': reading(up), 'settings': {...settings, 'min_confluence_factors': 9}, 'strategies': [strat(1, buyDef)]},
       {'reading': reading(up), 'settings': {...settings, 'trade_duration_min_sec': 120}, 'strategies': [strat(1, buyDef)]},
       {'reading': reading(up), 'settings': {...settings, 'min_confidence_to_signal': 0.99}, 'strategies': [strat(1, buyDef)]},
+      // strategy conditions alone: the confluence and the estimate are shown, not required
+      for (final s in [up, down, series(23, n: 120)])
+        {
+          'reading': reading(s),
+          'settings': {...settings, 'min_confluence_factors': 9, 'min_confidence_to_signal': 0.99, 'strategy_only_signals': true},
+          'strategies': [strat(1, buyDef), strat(2, sellDef, exp: 0.2)],
+        },
     ];
     final py = await python({'op': 'decide', 'cases': cases}) as List;
     var signals = 0;
@@ -183,6 +194,11 @@ void main() {
       if (dec.signal != 'WAIT') signals++;
     }
     expect(signals, greaterThan(0), reason: 'at least one case must reach BUY/SELL');
+    // with the same impossible thresholds, only "strategy conditions alone" lets the tested strategy through
+    final only = [
+      for (var k = cases.length - 3; k < cases.length; k++) ((py[k] as Map)['decision'] as Map)['signal']
+    ];
+    expect(only.where((x) => x != 'WAIT'), isNotEmpty, reason: '$only');
   }, skip: paritySkip);
 
   test('rule translation matches Python', () async {
@@ -197,6 +213,16 @@ void main() {
           {'text': 'buy oversold at support again', 'actions': ['act_buy'], 'conditions': ['support', 'oversold']},
         ],
         90
+      ],
+      [
+        [
+          {'text': 'double top neckline, sell', 'actions': ['act_sell'], 'conditions': ['breakout', 'double_top']},
+          {'text': 'head and shoulders, trend done', 'actions': ['act_sell'], 'conditions': ['breakout', 'head_shoulders', 'trend']},
+          {'text': 'enter at the gap', 'actions': ['act_enter'], 'conditions': ['gap_retest']},
+          {'text': 'enter at support', 'actions': ['act_enter'], 'conditions': ['support']},
+          {'text': 'bull flag breaks out', 'actions': ['act_buy'], 'conditions': ['breakout', 'bull_flag']},
+        ],
+        60
       ],
     ];
     final py = await python({'op': 'translate', 'cases': cases}) as List;
