@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/engine_api.dart';
+import '../../l10n/strings.dart' show hasString;
 import '../../state/app_state.dart';
 import '../theme.dart';
 import 'signal_details.dart';
@@ -135,7 +136,11 @@ class _SignalLogScreenState extends State<SignalLogScreen> {
                             child: Text((g['signal'] as String).substring(0, 1), style: const TextStyle(color: Colors.white)),
                           ),
                           title: Text('${g['signal']} · ${g['asset'] ?? '—'} · ${g['timeframe_sec']}${app.t('seconds')}'),
-                          subtitle: Text(fmtDate(g['created_at'] as String?)),
+                          subtitle: Text([
+                            fmtDate(g['created_at'] as String?),
+                            ?_waitReason(app, g),
+                          ].join('\n'), key: Key('signal_sub_${g['id']}')),
+                          isThreeLine: _waitReason(app, g) != null,
                           onTap: () => showSignalDetails(context, signal: g),
                           trailing: g['signal'] == 'WAIT'
                               ? null
@@ -274,4 +279,13 @@ class _ResultDialogState extends State<_ResultDialog> {
       ],
     );
   }
+}
+
+/// Why a WAIT was given (its reason code), in the user's language — shown right in the list.
+String? _waitReason(AppState app, Map g) {
+  if (g['signal'] != 'WAIT') return null;
+  final rs = g['reasons'];
+  final code = rs is List && rs.isNotEmpty ? '${rs.first}' : null;
+  if (code == null || !hasString('reason_$code')) return null;
+  return app.t('reason_$code');
 }

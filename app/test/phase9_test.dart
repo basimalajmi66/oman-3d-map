@@ -22,10 +22,14 @@ void main() {
     final e = FakeEngine()
       ..signals.addAll([
         {'id': 7, 'signal': 'BUY', 'asset': 'EURUSD', 'timeframe_sec': 30, 'created_at': '2026-11-17T10:00:00Z'},
-        {'id': 8, 'signal': 'WAIT', 'asset': null, 'timeframe_sec': 30, 'created_at': '2026-11-17T10:01:00Z'},
+        {'id': 8, 'signal': 'WAIT', 'asset': null, 'timeframe_sec': 30, 'created_at': '2026-11-17T10:01:00Z',
+          'reasons': ['no_approved_strategy']},
       ]);
     await pump(tester, e);
     expect(find.byKey(const Key('record_8')), findsNothing);
+    // why it waited, right in the list
+    expect(find.descendant(of: find.byKey(const Key('signal_sub_8')), matching: find.textContaining(tr('ar', 'reason_no_approved_strategy'))),
+        findsOneWidget);
     await tester.tap(find.byKey(const Key('record_7')));
     await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byKey(const Key('rr_account')), matching: find.text(tr('ar', 'real'))));
