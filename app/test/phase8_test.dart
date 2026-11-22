@@ -57,8 +57,8 @@ void main() {
     await tester.tap(find.byKey(const Key('tile_BUY')));
     await tester.pumpAndSettle();
     expect(find.textContaining(tr('ar', 'reason_strategy_signal')), findsNWidgets(2)); // panel status + details
-    expect(find.textContaining('ma_bull_alignment'), findsOneWidget);
-    expect(find.textContaining('rsi_overbought'), findsOneWidget);
+    expect(find.textContaining(tr('ar', 'c_ma_bull_alignment')), findsOneWidget); // factors shown in the user's language
+    expect(find.textContaining(tr('ar', 'c_rsi_overbought')), findsOneWidget);
     expect(find.byKey(const Key('strategy_evidence')), findsOneWidget);
     expect(find.textContaining('74%–87%'), findsOneWidget);
     for (var i = 1; i <= 14; i++) {
