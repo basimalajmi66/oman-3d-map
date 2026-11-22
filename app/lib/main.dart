@@ -32,6 +32,15 @@ import 'ui/theme.dart';
 final navigatorKey = GlobalKey<NavigatorState>();
 LiveMode? _live;
 
+/// Commands from the floating window: the direct port (reliable across engines) plus the plugin channel.
+Stream<dynamic> _liveCommands() {
+  final port = registerPort(overlayCommandPort);
+  final out = StreamController<dynamic>.broadcast();
+  port.listen(out.add);
+  FlutterOverlayWindow.overlayListener.listen(out.add);
+  return out.stream;
+}
+
 /// A shared chart image: crop screen first, then the usual shrinking. Null = cancelled.
 Future<UploadFile?> _cropAndPrepare(AppState state, UploadFile f) async {
   final ask = state.askCrop;
@@ -137,7 +146,7 @@ Future<void> startApp() async {
       state: state,
       screen: AndroidScreenSource(),
       crop: loadLastCrop,
-      commands: FlutterOverlayWindow.overlayListener,
+      commands: _liveCommands(),
       onSetFrame: (png) async {
         FlutterForegroundTask.launchApp(); // bring the app forward for the crop screen
         final ctx = navigatorKey.currentContext;

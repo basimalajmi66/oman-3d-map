@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/engine_api.dart';
 import '../../l10n/strings.dart';
+import '../../platform/android_overlay.dart' show registerPort, sendToApp, overlayDataPort;
 import '../theme.dart';
 
 /// UI of the Android floating window. Runs in its own Flutter engine and
@@ -26,12 +27,21 @@ class OverlayApp extends StatelessWidget {
         home: Material(
           color: Colors.transparent,
           child: OverlayCard(
-            updates: updates ?? FlutterOverlayWindow.overlayListener,
+            updates: updates ?? _windowUpdates(),
             onClose: onClose ?? () => FlutterOverlayWindow.closeOverlay(),
-            send: send ?? (m) => FlutterOverlayWindow.shareData(m),
+            send: send ?? sendToApp,
           ),
         ),
       );
+}
+
+/// What the app sends to the window: the direct port (reliable) merged with the plugin channel (fallback).
+Stream<dynamic> _windowUpdates() {
+  final port = registerPort(overlayDataPort);
+  final out = StreamController<dynamic>.broadcast();
+  port.listen(out.add);
+  FlutterOverlayWindow.overlayListener.listen(out.add);
+  return out.stream;
 }
 
 class OverlayCard extends StatefulWidget {

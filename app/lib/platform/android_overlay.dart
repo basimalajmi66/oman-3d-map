@@ -1,3 +1,6 @@
+import 'dart:isolate';
+import 'dart:ui' show IsolateNameServer;
+
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 import '../core/engine_api.dart';
@@ -59,6 +62,13 @@ class AndroidOverlayController implements OverlayController {
 
   @override
   Future<void> push(Json payload) async {
+    // a direct port first: the plugin's message channel is redirected whenever another engine (floating window,
+    // background service) starts, and then messages go astray
+    final port = IsolateNameServer.lookupPortByName(overlayDataPort);
+    if (port != null) {
+      port.send(payload);
+      return;
+    }
     if (await FlutterOverlayWindow.isActive()) await FlutterOverlayWindow.shareData(payload);
   }
 }
@@ -74,3 +84,26 @@ Json overlayPayload({required String lang, required String state, required Json 
       'duration_sec': recommendation['duration_sec'],
       'timeframe_sec': timeframe,
     };
+
+
+/// Port names shared by the app and its floating window (separate engines in the same process, same Dart VM).
+const overlayDataPort = 'uata_overlay_data'; // app → window
+const overlayCommandPort = 'uata_overlay_cmd'; // window → app
+
+/// Registers a fresh port under `name` (replacing a stale one) and returns it.
+ReceivePort registerPort(String name) {
+  final p = ReceivePort();
+  IsolateNameServer.removePortNameMapping(name);
+  IsolateNameServer.registerPortWithName(p.sendPort, name);
+  return p;
+}
+
+/// Window → app: through the direct port when the app is listening, else through the plugin.
+void sendToApp(Json message) {
+  final port = IsolateNameServer.lookupPortByName(overlayCommandPort);
+  if (port != null) {
+    port.send(message);
+  } else {
+    FlutterOverlayWindow.shareData(message);
+  }
+}
