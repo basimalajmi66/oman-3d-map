@@ -82,4 +82,41 @@ void main() {
     engine.close();
     dir.deleteSync(recursive: true);
   });
+
+  test('images inside a PDF are found and handed over as files the OCR reads (JPEG as is, Flate → PNG)', () {
+    final imgs = pdfPageImages(fx('scanned_text'));
+    expect(imgs.map((i) => (i.page, i.ext, i.width, i.height)), [(0, 'jpg', 1400, 260), (1, 'png', 1400, 260)]);
+    expect(imgs[0].bytes.sublist(0, 2), [0xff, 0xd8]); // a JPEG
+    expect(imgs[1].bytes.sublist(1, 4), 'PNG'.codeUnits);
+    expect(pdfPageImages(fx('rl_simple')), isEmpty); // a text-only PDF has no pictures to read
+  });
+
+  test('a scanned PDF on the phone: its pictures are read with OCR (Arabic + English) and rules are proposed',
+      () async {
+    final dir = Directory.systemTemp.createTempSync('uata_scan');
+    final engine = await LocalEngine.open(dir.path, (v) => File('assets/schema/schema_v$v.sql').readAsString());
+    engine.pageOcr = (image, ext) async {
+      final f = File('${dir.path}/ocr.$ext')..writeAsBytesSync(image);
+      final r = await Process.run('tesseract', [f.path, 'stdout', '-l', 'ara+eng', '--psm', '3']);
+      return r.stdout as String;
+    };
+    final api = LocalEngineApi(engine);
+    final bytes = fx('scanned_text');
+    final src = await api.uploadFile(UploadFile(name: 'scan.pdf', length: bytes.length, openRead: () => Stream.value(bytes)));
+    expect(src['extraction_status'], 'done', reason: '${src['notes']}');
+    final rules = (((src['report'] as Map)['extracted'] as Map)['rules'] as List).cast<Map>();
+    expect(rules.any((r) => (r['conditions'] as List).contains('oversold') && (r['actions'] as List).contains('act_buy')), isTrue,
+        reason: '$rules');
+    // the Arabic picture too: "at resistance … sell" (OCR of Arabic may miss a dot, the rule is still found)
+    expect(rules.any((r) => (r['conditions'] as List).contains('resistance') && (r['actions'] as List).contains('act_sell')), isTrue,
+        reason: '$rules');
+    // without OCR the same file is refused with the honest reason
+    engine.pageOcr = null;
+    final again = File('${dir.path}/copy.pdf')..writeAsBytesSync([...bytes, 0x0a]);
+    final b2 = again.readAsBytesSync();
+    final plain = await api.uploadFile(UploadFile(name: 'scan2.pdf', length: b2.length, openRead: () => Stream.value(b2)));
+    expect(plain['notes'], contains('no extractable text'));
+    engine.close();
+    dir.deleteSync(recursive: true);
+  }, timeout: const Timeout(Duration(minutes: 3)), skip: Process.runSync('which', ['tesseract']).exitCode == 0 ? false : 'tesseract not installed');
 }

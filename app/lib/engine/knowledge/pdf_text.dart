@@ -12,6 +12,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:image/image.dart' as im;
 
 class PdfError implements Exception {
   PdfError(this.message);
@@ -356,6 +357,80 @@ class PdfDocument {
     return data;
   }
 
+  /// An image XObject as a file the OCR can read: JPEG kept as it is, 8-bit / 1-bit gray, RGB and indexed pixels
+  /// turned into PNG. Null for formats without a decoder here (JPEG 2000, JBIG2, CCITT fax).
+  (Uint8List, String)? imageFile(PdfStream s) {
+    final f = resolve(s.dict['Filter']);
+    final filters = [for (final x in (f is List ? f : (f == null ? [] : [f]))) (resolve(x) as PdfName?)?.name];
+    final w = resolve(s.dict['Width']) as int? ?? 0, h = resolve(s.dict['Height']) as int? ?? 0;
+    if (w <= 0 || h <= 0) return null;
+    if (filters.isNotEmpty && (filters.last == 'DCTDecode' || filters.last == 'DCT')) {
+      var data = s.raw;
+      for (final name in filters.sublist(0, filters.length - 1)) {
+        if (name == 'FlateDecode' || name == 'Fl') {
+          data = _inflate(data);
+        } else if (name == 'ASCII85Decode' || name == 'A85') {
+          data = _ascii85(data);
+        } else {
+          return null;
+        }
+      }
+      return (data, 'jpg');
+    }
+    if (filters.any((n) => n != 'FlateDecode' && n != 'Fl' && n != 'ASCII85Decode' && n != 'A85')) return null;
+    final px = decode(s);
+    final bpc = resolve(s.dict['BitsPerComponent']) as int? ?? 8;
+    var cs = resolve(s.dict['ColorSpace']);
+    List<int>? palette;
+    var comps = 1;
+    if (cs is List && cs.isNotEmpty && resolve(cs.first) == const PdfName('Indexed')) {
+      final base = resolve(cs[1]);
+      comps = base == const PdfName('DeviceRGB') ? 3 : 1;
+      final lookup = resolve(cs[3]);
+      palette = lookup is Uint8List ? lookup : (lookup is PdfStream ? decode(lookup) : null);
+      cs = null;
+    } else if (cs is List && cs.isNotEmpty && resolve(cs.first) == const PdfName('ICCBased')) {
+      comps = (dictOf(resolve(cs[1]) is PdfStream ? (resolve(cs[1]) as PdfStream).dict : null)['N'] as int?) ?? 3;
+    } else if (cs == const PdfName('DeviceRGB')) {
+      comps = 3;
+    } else if (cs == const PdfName('DeviceCMYK')) {
+      return null;
+    }
+    final img = im.Image(width: w, height: h, numChannels: 3);
+    final rowBytes = palette != null ? (w * bpc + 7) ~/ 8 : (bpc == 1 ? (w + 7) ~/ 8 : w * comps);
+    if (px.length < rowBytes * h) return null;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        int r, g, b;
+        if (palette != null) {
+          final idx = bpc == 8 ? px[y * rowBytes + x] : (px[y * rowBytes + (x * bpc >> 3)] >> (8 - bpc - (x * bpc & 7))) & ((1 << bpc) - 1);
+          final o = idx * comps;
+          if (o + comps > palette.length) return null;
+          r = palette[o];
+          g = comps == 3 ? palette[o + 1] : r;
+          b = comps == 3 ? palette[o + 2] : r;
+        } else if (bpc == 1) {
+          final bit = (px[y * rowBytes + (x >> 3)] >> (7 - (x & 7))) & 1;
+          r = g = b = bit == 1 ? 255 : 0;
+        } else if (bpc == 8 && comps == 3) {
+          final o = y * rowBytes + x * 3;
+          r = px[o];
+          g = px[o + 1];
+          b = px[o + 2];
+        } else if (bpc == 8 && comps == 1) {
+          r = g = b = px[y * rowBytes + x];
+        } else {
+          return null;
+        }
+        img.setPixelRgb(x, y, r, g, b);
+      }
+    }
+    if (resolve(s.dict['Decode']) case final List d when d.length >= 2 && (resolve(d[0]) as num) == 1) {
+      im.invert(img); // a "Decode [1 0]" image is stored inverted (common for 1-bit scans)
+    }
+    return (im.encodePng(img, level: 1), 'png');
+  }
+
   static Uint8List _ascii85(Uint8List d) {
     final out = BytesBuilder();
     final group = <int>[];
@@ -647,6 +722,7 @@ class _Interpreter {
   _Interpreter(this.doc);
   final PdfDocument doc;
   final glyphs = <_Glyph>[];
+  final images = <PdfStream>[]; // image XObjects drawn on the page (for OCR)
   final _fontCache = <Object, _Font>{};
 
   void run(Uint8List content, Map<String, Object?> resources, List<double> ctm0, int depth) {
@@ -754,7 +830,9 @@ class _Interpreter {
           final name = operands.isNotEmpty ? operands.last : null;
           if (name is PdfName) {
             final xo = doc.resolve(xobjects[name.name]);
-            if (xo is PdfStream && doc.resolve(xo.dict['Subtype']) == const PdfName('Form')) {
+            if (xo is PdfStream && doc.resolve(xo.dict['Subtype']) == const PdfName('Image')) {
+              if (!images.contains(xo)) images.add(xo);
+            } else if (xo is PdfStream && doc.resolve(xo.dict['Subtype']) == const PdfName('Form')) {
               final m = doc.resolve(xo.dict['Matrix']) as List?;
               final fm = m == null ? [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] : [for (final v in m) ((doc.resolve(v) as num?) ?? 0).toDouble()];
               final res = xo.dict['Resources'] != null ? doc.dictOf(xo.dict['Resources']) : resources;
@@ -876,6 +954,61 @@ String _finishLine(List<String> units, bool visualArabic) {
     if (m != null) text = '${text.substring(m.end)}${m[1]}';
   }
   return text.replaceAll(RegExp(r'[ \t]+'), ' ').trim();
+}
+
+/// An image found on a PDF page, ready for OCR.
+class PdfPageImage {
+  PdfPageImage(this.page, this.bytes, this.ext, this.width, this.height);
+  final int page; // 0-based
+  final Uint8List bytes;
+  final String ext; // jpg | png
+  final int width, height;
+}
+
+/// The images drawn on each page that are big enough to hold readable text (scanned pages, pictures of text),
+/// largest first, at most `limit` for the whole document. Throws PdfError like [pdfPageTexts].
+List<PdfPageImage> pdfPageImages(Uint8List data, {int limit = 40, int minWidth = 200, int minHeight = 40}) {
+  final doc = PdfDocument(data);
+  if (doc.encrypted) throw PdfError('PDF is password protected');
+  final found = <(int, PdfStream)>[];
+  final pages = doc.pages();
+  for (var i = 0; i < pages.length; i++) {
+    final p = pages[i];
+    final interp = _Interpreter(doc);
+    final contents = doc.resolve(p['Contents']);
+    final parts = contents is List ? [for (final c in contents) doc.resolve(c)] : [contents];
+    final buf = BytesBuilder();
+    for (final c in parts) {
+      if (c is PdfStream) {
+        buf
+          ..add(doc.decode(c))
+          ..addByte(0x0a);
+      }
+    }
+    try {
+      interp.run(buf.takeBytes(), doc.dictOf(p['Resources']), const [1, 0, 0, 1, 0, 0], 0);
+    } catch (_) {}
+    for (final s in interp.images) {
+      final w = doc.resolve(s.dict['Width']) as int? ?? 0, h = doc.resolve(s.dict['Height']) as int? ?? 0;
+      if (w >= minWidth && h >= minHeight) found.add((i, s));
+    }
+  }
+  int area((int, PdfStream) e) => ((e.$2.dict['Width'] as int?) ?? 0) * ((e.$2.dict['Height'] as int?) ?? 0);
+  found.sort((a, b) => area(b).compareTo(area(a)));
+  final out = <PdfPageImage>[];
+  for (final (page, s) in found) {
+    if (out.length >= limit) break;
+    try {
+      final f = doc.imageFile(s);
+      if (f != null) {
+        out.add(PdfPageImage(page, f.$1, f.$2, doc.resolve(s.dict['Width']) as int, doc.resolve(s.dict['Height']) as int));
+      }
+    } catch (_) {
+      // one damaged image does not stop the others
+    }
+  }
+  out.sort((a, b) => a.page.compareTo(b.page));
+  return out;
 }
 
 /// Text of every page (empty strings for pages without text). Throws PdfError for encrypted / unreadable files.

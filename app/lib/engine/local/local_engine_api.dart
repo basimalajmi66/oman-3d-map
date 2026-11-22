@@ -12,6 +12,7 @@ import 'dart:typed_data';
 
 import '../../core/engine_api.dart';
 import '../knowledge/extract.dart' as kx;
+import '../knowledge/pdf_text.dart' show PdfPageImage;
 import '../strategy/datasets.dart' as ds;
 import '../strategy/discovery.dart' as disc;
 import '../strategy/features.dart' show FeatureSet;
@@ -26,6 +27,9 @@ import 'settings.dart';
 
 /// Video file path → timed speech (null: recognition failed).
 typedef SpeechToText = Future<List<kx.Cue>?> Function(String videoPath);
+
+/// Image file bytes (+ extension: jpg / png) → its text (Arabic and English).
+typedef PageOcr = Future<String> Function(Uint8List image, String ext);
 
 class LocalEngine {
   LocalEngine._(this.root, this.db, this.schema, [this.ocr]) {
@@ -46,6 +50,9 @@ class LocalEngine {
 
   /// On-device speech recognition for videos (Whisper on Android); null where unavailable.
   SpeechToText? speech;
+
+  /// On-device OCR of whole images (text inside PDFs: scanned pages, pictures); null where unavailable.
+  PageOcr? pageOcr;
   final LocalDb db;
   final SchemaLoader schema;
   late final SettingsStore settings;
@@ -296,8 +303,8 @@ class LocalEngineApi implements EngineApi {
         (List<kx.Chunk>, String?)? pre;
         final lower = file.name.toLowerCase();
         if (lower.endsWith('.pdf') && bytes.length <= maxUploadBytes) {
-          // a book can take seconds to read: never on the UI thread
-          pre = await _extractPdfInBackground(bytes);
+          // a book can take seconds to read: never on the UI thread; its images are then read with OCR (on device)
+          pre = engine.pageOcr == null ? await _extractPdfInBackground(bytes) : await _pdfWithOcr(bytes, engine.pageOcr!);
         } else if (const ['.mp4', '.mkv', '.mov', '.avi', '.webm'].any(lower.endsWith) && engine.speech != null &&
             bytes.length <= maxUploadBytes) {
           engine.knowledge.checkNotDuplicate(bytes); // never listen to a video that is already in the library
@@ -416,6 +423,31 @@ class LocalEngineApi implements EngineApi {
       b.add(chunk);
     }
     return b.takeBytes();
+  }
+}
+
+/// PDF text plus the text inside its images (scanned pages, pictures of rules), read by the phone's OCR.
+Future<(List<kx.Chunk>, String?)> _pdfWithOcr(Uint8List bytes, PageOcr ocr) async {
+  final List<String> pages;
+  final List<PdfPageImage> images;
+  try {
+    (pages, images) = await Isolate.run(() => kx.pdfParts(bytes));
+  } on kx.ExtractionError catch (e) {
+    return (<kx.Chunk>[], e.message);
+  }
+  final texts = [...pages];
+  for (final img in images) {
+    try {
+      final t = (await ocr(img.bytes, img.ext)).trim();
+      if (t.isNotEmpty) texts[img.page] = '${texts[img.page]}\n$t'.trim();
+    } catch (_) {
+      // an unreadable image is skipped
+    }
+  }
+  try {
+    return (kx.chunksFromPdfPages(texts, ocrTried: images.isNotEmpty), null);
+  } on kx.ExtractionError catch (e) {
+    return (<kx.Chunk>[], e.message);
   }
 }
 

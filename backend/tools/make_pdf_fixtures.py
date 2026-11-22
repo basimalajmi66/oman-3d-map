@@ -95,6 +95,26 @@ c.rect(72, 600, 200, 100, fill=1)
 c.showPage()
 c.save()
 
+# 4b) a scanned rule book: pages that are only pictures of text (JPEG on page 1, PNG/Flate on page 2)
+from PIL import Image, ImageDraw, ImageFont
+font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 34)
+pics = []
+for k, lines in enumerate([
+        ["Trading rules (scanned)", "When RSI is oversold near support, buy for 2 minutes."],
+        ["إذا كان السعر عند المقاومة مع تشبع شرائي فادخل بيع", "Do not trade during important news."]]):
+    img = Image.new("RGB", (1400, 260), "white")
+    d = ImageDraw.Draw(img)
+    for j, line in enumerate(lines):
+        d.text((40, 40 + 100 * j), line, fill="black", font=font)
+    path = Path(tempfile.gettempdir()) / f"uata_scan_{k}.{'jpg' if k == 0 else 'png'}"
+    img.save(path, quality=92) if k == 0 else img.save(path)
+    pics.append(path)
+c = canvas.Canvas(str(out / "scanned_text.pdf"), pagesize=A4)
+for path in pics:
+    c.drawImage(str(path), 40, 600, width=515, height=96)
+    c.showPage()
+c.save()
+
 # 5) encrypted
 c = canvas.Canvas(str(out / "encrypted.pdf"), pagesize=A4, encrypt="secret-pass")
 c.drawString(72, 760, "secret rules")

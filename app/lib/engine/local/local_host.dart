@@ -22,6 +22,7 @@ class LocalEngineHost implements EngineHost {
     _engine = await LocalEngine.open('${dir.path}/uata', (v) => rootBundle.loadString('assets/schema/schema_v$v.sql'),
         ocr: Platform.isAndroid ? (png, {required digits}) => tesseractLine(png, digits: digits) : null);
     if (Platform.isAndroid && await whisperBundled()) _engine!.speech = whisperSpeech;
+    if (Platform.isAndroid) _engine!.pageOcr = (image, ext) => tesseractText(image, ext);
     return LocalEngineApi(_engine!);
   }
 

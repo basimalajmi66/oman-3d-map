@@ -296,17 +296,25 @@ List<Chunk> extractXlsx(Uint8List data) {
   return out;
 }
 
-List<Chunk> extractPdf(Uint8List data) {
-  final List<String> pages;
+List<Chunk> extractPdf(Uint8List data) => chunksFromPdfPages(pdfParts(data, images: false).$1);
+
+/// The text of every page and (optionally) the images worth reading with OCR. Throws ExtractionError.
+(List<String>, List<PdfPageImage>) pdfParts(Uint8List data, {bool images = true}) {
   try {
-    pages = pdfPageTexts(data);
+    return (pdfPageTexts(data), images ? pdfPageImages(data) : const <PdfPageImage>[]);
   } on PdfError catch (e) {
     throw ExtractionError(e.message == 'PDF is password protected' ? e.message : 'PDF could not be read: ${e.message}');
   } catch (e) {
     throw ExtractionError('PDF could not be read: $e');
   }
+}
+
+/// Page texts (with any text read from their images) → located chunks.
+List<Chunk> chunksFromPdfPages(List<String> pages, {bool ocrTried = false}) {
   if (!pages.any((t) => t.trim().isNotEmpty)) {
-    throw ExtractionError('PDF has no extractable text (scanned images; OCR of PDFs is not supported yet)');
+    throw ExtractionError(ocrTried
+        ? 'PDF has no readable text: its images were read with OCR but held no text'
+        : 'PDF has no extractable text (scanned images; OCR of PDFs is not supported yet)');
   }
   return pack([for (var i = 0; i < pages.length; i++) (pages[i], 'p.${i + 1}')]);
 }
