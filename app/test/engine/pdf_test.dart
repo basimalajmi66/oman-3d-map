@@ -97,7 +97,7 @@ void main() {
     final engine = await LocalEngine.open(dir.path, (v) => File('assets/schema/schema_v$v.sql').readAsString());
     engine.pageOcr = (image, ext) async {
       final f = File('${dir.path}/ocr.$ext')..writeAsBytesSync(image);
-      final r = await Process.run('tesseract', [f.path, 'stdout', '-l', 'ara+eng', '--psm', '3']);
+      final r = await Process.run('tesseract', [f.path, 'stdout', '--tessdata-dir', 'assets/tessdata', '-l', 'ara+eng', '--psm', '3']);
       return r.stdout as String;
     };
     final api = LocalEngineApi(engine);
