@@ -67,7 +67,16 @@ Future<void> showSignalDetails(BuildContext context, {Json? signal}) {
     ...((rec['reasons'] as List?)?.cast<String>() ?? const [])
         .map((r) => hasString('reason_$r') ? app.t('reason_$r') : r),
   ];
-  List<String> list(String k) => (rec[k] as List?)?.cast<String>() ?? const [];
+  // factors are stored as "indicator: code" — shown in the user's language when known
+  String factor(String f) {
+    final i = f.indexOf(': ');
+    if (i < 0) return f;
+    final name = f.substring(0, i), code = f.substring(i + 2);
+    final n = hasString('ind_$name') ? app.t('ind_$name') : name;
+    final c = hasString('c_$code') ? app.t('c_$code') : code;
+    return '$n — $c';
+  }
+  List<String> list(String k) => [for (final f in (rec[k] as List?)?.cast<String>() ?? const <String>[]) factor(f)];
   final conf = (rec['confidence'] ?? rec['confidence_score']) as num?;
   final calibrated = rec['confidence_calibrated'] == true || rec['confidence_calibrated'] == 1;
   final quality = rec['data_quality'] as num?;
