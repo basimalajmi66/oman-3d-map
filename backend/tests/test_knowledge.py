@@ -123,3 +123,11 @@ def test_chunk_text_and_fts_query_helpers():
     assert chunk_text("p1\n\np2") == ["p1\n\np2"]
     assert fts_query("!!!") is None
     assert fts_query('rsi "70"') == '"rsi"* "70"*'
+
+
+def test_full_text_of_a_source_can_be_read(client):
+    body = "Buy when RSI is below 30 near support.\nSell at resistance.".encode()
+    src = client.post("/knowledge/files", files={"file": ("lesson.txt", io.BytesIO(body), "text/plain")}).json()
+    text = client.get(f"/knowledge/sources/{src['id']}/text").json()["text"]
+    assert "RSI is below 30" in text and "Sell at resistance" in text
+    assert client.get("/knowledge/sources/99999/text").status_code == 404

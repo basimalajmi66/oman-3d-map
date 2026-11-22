@@ -110,6 +110,9 @@ void main() {
     // the Arabic picture too: "at resistance … sell" (OCR of Arabic may miss a dot, the rule is still found)
     expect(rules.any((r) => (r['conditions'] as List).contains('resistance') && (r['actions'] as List).contains('act_sell')), isTrue,
         reason: '$rules');
+    // the full text read (OCR included) can be shown and copied
+    final full = await api.sourceText(src['id'] as int);
+    expect(full.toLowerCase(), contains('rsi'));
     // without OCR the same file is refused with the honest reason
     engine.pageOcr = null;
     final again = File('${dir.path}/copy.pdf')..writeAsBytesSync([...bytes, 0x0a]);

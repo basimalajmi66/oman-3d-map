@@ -291,6 +291,8 @@ class LocalEngineApi implements EngineApi {
   @override
   Future<Json> getSource(int id) => _run(() => engine.knowledge.getSource(id));
   @override
+  Future<String> sourceText(int id) => _run(() => engine.knowledge.sourceText(id));
+  @override
   Future<void> deleteSource(int id) => _run(() => engine.knowledge.deleteSource(id));
   @override
   Future<Json> addNote({required String title, required String content, String? category, List<String> tags = const [], String itemType = 'note'}) =>

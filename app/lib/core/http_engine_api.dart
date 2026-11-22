@@ -169,6 +169,8 @@ class HttpEngineApi implements EngineApi {
   @override
   Future<Json> getSource(int id) async => _map(await _get('/knowledge/sources/$id'));
   @override
+  Future<String> sourceText(int id) async => (_map(await _get('/knowledge/sources/$id/text'))['text'] as String?) ?? '';
+  @override
   Future<void> deleteSource(int id) async => _delete('/knowledge/sources/$id');
   @override
   Future<Json> addNote({

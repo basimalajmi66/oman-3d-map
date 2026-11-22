@@ -229,6 +229,12 @@ class KnowledgeService {
           _public(rowToMap(r))
       ]);
 
+  String sourceText(int id) => db.session((d) {
+        final row = d.select('SELECT extracted_text FROM knowledge_sources WHERE id=?', [id]);
+        if (row.isEmpty) throw _nf('source $id');
+        return (row.first['extracted_text'] as String?) ?? '';
+      });
+
   Map<String, dynamic> getSource(int id) => db.session((d) {
         final row = d.select('SELECT * FROM knowledge_sources WHERE id=?', [id]);
         if (row.isEmpty) throw _nf('source $id');

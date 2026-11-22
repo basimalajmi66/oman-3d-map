@@ -450,6 +450,10 @@ def create_app(paths: Paths, token: str | None = None, capturer: Capturer | None
     def get_source(source_id: int):
         return svc.knowledge.get_source(source_id)
 
+    @app.get("/knowledge/sources/{source_id}/text", dependencies=a)
+    def source_text(source_id: int):
+        return {"source_id": source_id, "text": svc.knowledge.source_text(source_id)}
+
     @app.patch("/knowledge/sources/{source_id}", dependencies=a)
     def patch_source(source_id: int, patch: dict[str, Any]):
         return svc.knowledge.update_source(source_id, patch)

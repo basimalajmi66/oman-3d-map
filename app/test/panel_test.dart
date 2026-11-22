@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:uata_app/core/engine_api.dart';
@@ -163,6 +164,27 @@ void main() {
     await tester.tap(find.byKey(const Key('add_file')));
     await tester.pumpAndSettle();
     expect(find.textContaining(tr('ar', 'duplicate_file')), findsOneWidget);
+
+    // the full text read from a source (e.g. a video's transcript) can be shown and copied
+    final sid = e.sources.first['id'] as int;
+    e.sources.first['extracted_chars'] = 22;
+    e.sourceTexts[sid] = 'buy when RSI is below 30';
+    final copied = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied.add((call.arguments as Map)['text'] as String);
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await tester.tap(find.text(e.sources.first['title'] as String).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('show_full_text')));
+    await tester.pumpAndSettle();
+    expect(find.text('buy when RSI is below 30'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('copy_full_text')));
+    await tester.pumpAndSettle();
+    expect(copied, ['buy when RSI is below 30']);
+    await tester.tap(find.text(tr('ar', 'close')));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('delete_source')));
     await tester.pumpAndSettle();

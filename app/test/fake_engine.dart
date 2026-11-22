@@ -242,6 +242,9 @@ class FakeEngine implements EngineApi {
 
   @override
   Future<Json> getSource(int id) async => sources.firstWhere((s) => s['id'] == id);
+  final sourceTexts = <int, String>{};
+  @override
+  Future<String> sourceText(int id) async => sourceTexts[id] ?? '';
 
   @override
   Future<void> deleteSource(int id) async => sources.removeWhere((s) => s['id'] == id);

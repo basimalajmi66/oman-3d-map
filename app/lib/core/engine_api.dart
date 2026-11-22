@@ -66,6 +66,8 @@ abstract class EngineApi {
   // knowledge library
   Future<List<Json>> listSources({String? kind, String? category});
   Future<Json> getSource(int id);
+  /// The full text read from a source (a video's transcript, a PDF's pages, OCR of its images).
+  Future<String> sourceText(int id);
   Future<void> deleteSource(int id);
   Future<Json> addNote({
     required String title,

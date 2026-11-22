@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/engine_api.dart';
@@ -284,6 +285,37 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
     );
   }
 
+  /// The whole text read from the source (a video's transcript, a PDF's pages) — selectable, with a copy button.
+  Future<void> _showFullText(Json s) async {
+    final app = AppScope.read(context);
+    String text;
+    try {
+      text = await app.engine.sourceText(s['id'] as int);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      return;
+    }
+    if (!mounted) return;
+    Future<void> copy() async {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.t('copied'))));
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s['title'] as String? ?? ''),
+        content: SizedBox(
+          width: 600,
+          child: SingleChildScrollView(child: SelectableText(text, key: const Key('full_text_body'))),
+        ),
+        actions: [
+          TextButton.icon(key: const Key('copy_full_text'), icon: const Icon(Icons.copy), label: Text(app.t('copy_all')), onPressed: copy),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(app.t('close'))),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDetail(AppState app, {VoidCallback? onBack}) {
     final s = _selected!;
     final items = (s['items'] as List? ?? const []).cast<Map>().map((e) => e.cast<String, dynamic>()).toList();
@@ -310,6 +342,13 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
             label: Text(app.t('videos')),
             onPressed: () => Navigator.of(context)
                 .push(MaterialPageRoute<void>(builder: (_) => VideoPage(sourceId: s['id'] as int))),
+          ),
+        if (((s['extracted_chars'] as num?) ?? 0) > 0)
+          TextButton.icon(
+            key: const Key('show_full_text'),
+            icon: const Icon(Icons.subject),
+            label: Text(app.t(s['kind'] == 'video' ? 'full_transcript' : 'full_text')),
+            onPressed: () => _showFullText(s),
           ),
         if (s['report'] is Map) Text('${app.t('learning_reports')}: ${(s['report'] as Map)['summary']}',
             key: const Key('source_report_summary'), style: const TextStyle(fontSize: 12)),

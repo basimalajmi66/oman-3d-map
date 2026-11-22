@@ -282,6 +282,14 @@ class KnowledgeService:
             rows = conn.execute(sql, args).fetchall()
         return [self._public_source(row_to_dict(r)) for r in rows]
 
+    def source_text(self, source_id: int) -> str:
+        """The full text read from a source (a video's transcript, a PDF's pages), for the user to read or copy."""
+        with self.db.session() as conn:
+            row = conn.execute("SELECT extracted_text FROM knowledge_sources WHERE id=?", (source_id,)).fetchone()
+        if row is None:
+            raise NotFound(f"source {source_id}")
+        return row[0] or ""
+
     def get_source(self, source_id: int) -> dict[str, Any]:
         with self.db.session() as conn:
             row = conn.execute("SELECT * FROM knowledge_sources WHERE id=?", (source_id,)).fetchone()
