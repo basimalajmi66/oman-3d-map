@@ -28,8 +28,7 @@ void main() {
     await pump(tester, e);
     expect(find.byKey(const Key('record_8')), findsNothing);
     // why it waited, right in the list
-    expect(find.descendant(of: find.byKey(const Key('signal_sub_8')), matching: find.textContaining(tr('ar', 'reason_no_approved_strategy'))),
-        findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const Key('signal_sub_8'))).data, contains(tr('ar', 'reason_no_approved_strategy')));
     await tester.tap(find.byKey(const Key('record_7')));
     await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byKey(const Key('rr_account')), matching: find.text(tr('ar', 'real'))));
