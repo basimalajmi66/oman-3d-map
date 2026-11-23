@@ -154,6 +154,14 @@ void main() {
     await tester.tap(find.byKey(const Key('overlay_analyze')));
     await tester.tap(find.byKey(const Key('overlay_auto')));
     expect(sent, [{'cmd': 'hello'}, {'cmd': 'analyze'}, {'cmd': 'auto', 'on': true}]); // hello: ask for the state on start
+    // the chart reading: direction and the next step, shown under the strategy badge
+    updates.add({'live': true, 'lang': 'ar', 'signal': 'WAIT', 'read_bias': 'up', 'read_head': 'صعود ↑ · قوية',
+      'read_step': tr('ar', 'read_buy'), 'read_lines': ['انتبه: مقاومة قريبة عند 3570.5']});
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('overlay_read')), findsOneWidget);
+    expect(find.textContaining('صعود ↑ · قوية'), findsOneWidget);
+    expect(find.text(tr('ar', 'read_buy')), findsOneWidget);
+    expect(find.textContaining('3570.5'), findsOneWidget);
     updates.add({'live': true, 'hide': true});
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('overlay_analyze')), findsNothing);

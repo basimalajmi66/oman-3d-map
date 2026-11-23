@@ -166,6 +166,11 @@ void engineScenarios(EngineApi Function() apiOf,
     expect((a['steps'] as List), hasLength(14));
     expect(a['confidence_calibrated'], false);
     expect((a['strategy'] as Map)['name'], 'Contract signal');
+    // the phone engine also reads the chart directly: an uptrend chart → "up", next step buy
+    if (a['read'] != null) {
+      expect((a['read'] as Map)['bias'], 'up', reason: '${a['read']}');
+      expect(((a['read'] as Map)['next'] as Map)['action'], 'buy');
+    }
     // approved library knowledge related to the chart is shown with the signal (both engines have the library)
     expect(a['knowledge'], isNotEmpty);
     expect((a['reasons'] as List).last, startsWith('related approved knowledge'));

@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import '../../core/engine_api.dart';
+import '../signal/chart_read.dart';
 import '../signal/decision.dart';
 import '../strategy/backtest.dart' as bt;
 import '../strategy/conditions.dart' as cnd;
@@ -256,6 +257,8 @@ class SignalService {
     }
     out['repeated'] = repeated;
     out['recorded'] = false;
+    // the chart's own reading (direction + next step), shown apart from the strategy signal
+    out['read'] = chartRead(reading, technical, durationSec: s['trade_duration_min_sec'] as int?);
     if (!repeated && reading['usable'] == true) {
       _lastFp[stream] = fp;
       final reasons = (out['reasons'] as List).isEmpty ? [out['reason_code'] ?? 'wait'] : out['reasons'] as List;

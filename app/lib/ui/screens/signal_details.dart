@@ -5,6 +5,36 @@ import '../../l10n/strings.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
 
+/// The direct chart reading: direction, strength, the next step, and the factors on each side.
+Widget readCard(AppState app, Map? read, {bool details = true}) {
+  final (head, step, lines) = readText(app.lang, read);
+  final bias = read?['bias'];
+  final color = switch (bias) { 'up' => SignalColors.buy, 'down' => SignalColors.sell, _ => SignalColors.wait };
+  List<String> side(String k) => [for (final f in (read?[k] as List? ?? const [])) factorText(app.lang, '$f')];
+  return Container(
+    key: const Key('read_card'),
+    width: double.infinity,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(border: Border.all(color: color, width: 2), borderRadius: BorderRadius.circular(10)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(app.t('read_title'), style: const TextStyle(fontSize: 12)),
+      Text(head, key: const Key('read_head'), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18)),
+      if (step.isNotEmpty) Text(step, key: const Key('read_step'), style: const TextStyle(fontWeight: FontWeight.bold)),
+      ...lines.map((l) => Text('• $l')),
+      if (details) ...[
+        for (final (k, title) in [('bullish', 'read_for_up'), ('bearish', 'read_for_down')])
+          if (side(k).isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(app.t(title), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+            ...side(k).map((f) => Text('• $f', style: const TextStyle(fontSize: 12))),
+          ],
+      ],
+      const SizedBox(height: 4),
+      Text(app.t('read_note'), style: const TextStyle(fontSize: 11)),
+    ]),
+  );
+}
+
 String _pct(num? v) => v == null ? '—' : '${(v * 100).round()}%';
 
 /// The 14 decision steps with their status (ok / fail / info).
@@ -107,6 +137,7 @@ Future<void> showSignalDetails(BuildContext context, {Json? signal}) {
         width: 480,
         child: SingleChildScrollView(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            if (rec['read'] is Map) ...[readCard(app, rec['read'] as Map), const SizedBox(height: 8)],
             kv(app.t('confidence'),
                 conf == null ? '—' : '${(conf * 100).round()}%${calibrated ? '' : ' (${app.t('uncalibrated')})'}'),
             kv(app.t('duration'), rec['duration_sec'] == null ? '—' : '${rec['duration_sec']}${app.t('seconds')}'),

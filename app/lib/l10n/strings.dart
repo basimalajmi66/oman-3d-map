@@ -715,6 +715,35 @@ const Map<String, Map<String, String>> _strings = {
   'ind_momentum': {'ar': 'الزخم', 'en': 'Momentum'},
   'ind_volatility': {'ar': 'التذبذب', 'en': 'Volatility'},
   'ind_chart_patterns': {'ar': 'النماذج السعرية', 'en': 'Chart patterns'},
+  // direct chart reading
+  'read_title': {'ar': 'قراءة الشارت', 'en': 'Chart reading'},
+  'read_up': {'ar': 'صعود ↑', 'en': 'Up ↑'},
+  'read_down': {'ar': 'هبوط ↓', 'en': 'Down ↓'},
+  'read_unclear': {'ar': 'غير واضح', 'en': 'Unclear'},
+  'read_s_strong': {'ar': 'قوية', 'en': 'strong'},
+  'read_s_medium': {'ar': 'متوسطة', 'en': 'medium'},
+  'read_s_weak': {'ar': 'ضعيفة', 'en': 'weak'},
+  'read_buy': {'ar': 'الخطوة التالية: شراء (CALL)', 'en': 'Next step: BUY (CALL)'},
+  'read_sell': {'ar': 'الخطوة التالية: بيع (PUT)', 'en': 'Next step: SELL (PUT)'},
+  'read_wait_break': {'ar': 'الخطوة التالية: انتظر الكسر', 'en': 'Next step: wait for a break'},
+  'read_break_up': {'ar': 'إغلاق فوق {p} = شراء', 'en': 'a close above {p} = buy'},
+  'read_break_down': {'ar': 'إغلاق تحت {p} = بيع', 'en': 'a close below {p} = sell'},
+  'read_break_any': {'ar': 'كسر أقرب مقاومة = شراء، كسر أقرب دعم = بيع', 'en': 'break of the nearest resistance = buy, of the nearest support = sell'},
+  'read_watch_res': {'ar': 'انتبه: مقاومة قريبة عند {p}', 'en': 'Careful: resistance near {p}'},
+  'read_watch_sup': {'ar': 'انتبه: دعم قريب عند {p}', 'en': 'Careful: support near {p}'},
+  'read_for_up': {'ar': 'عوامل الصعود', 'en': 'Bullish factors'},
+  'read_for_down': {'ar': 'عوامل الهبوط', 'en': 'Bearish factors'},
+  'read_none': {'ar': 'لا توجد قراءة: الصورة غير واضحة أو الشموع قليلة', 'en': 'No reading: unclear image or too few candles'},
+  'read_note': {'ar': 'قراءة فنية للشارت، ليست استراتيجية مختبرة — القرار والتنفيذ لك.', 'en': 'A technical reading of the chart, not a tested strategy — the decision and the trade are yours.'},
+  'read_strategy': {'ar': 'إشارة الاستراتيجية المختبرة', 'en': 'Tested strategy signal'},
+  'ind_chart_pattern': {'ar': 'كسر نموذج', 'en': 'Pattern break'},
+  'c_double_top': {'ar': 'القمة المزدوجة', 'en': 'double top'},
+  'c_double_bottom': {'ar': 'القاع المزدوج', 'en': 'double bottom'},
+  'c_head_shoulders': {'ar': 'الرأس والكتفين', 'en': 'head & shoulders'},
+  'c_bull_flag': {'ar': 'العلم الصاعد', 'en': 'bull flag'},
+  'c_ascending_triangle': {'ar': 'المثلث الصاعد', 'en': 'ascending triangle'},
+  'c_gap_retest_bull': {'ar': 'عودة إلى فجوة صاعدة', 'en': 'bullish gap retest'},
+  'c_gap_retest_bear': {'ar': 'عودة إلى فجوة هابطة', 'en': 'bearish gap retest'},
   // knowledge item types / kinds
   'it_note': {'ar': 'ملاحظة', 'en': 'Note'},
   'it_rule': {'ar': 'قاعدة', 'en': 'Rule'},
@@ -726,3 +755,42 @@ const Map<String, Map<String, String>> _strings = {
 String tr(String lang, String key) => _strings[key]?[lang] ?? _strings[key]?['en'] ?? key;
 
 bool hasString(String key) => _strings.containsKey(key);
+
+/// "indicator: code" factor labels in the user's language when known.
+String factorText(String lang, String f) {
+  final i = f.indexOf(': ');
+  if (i < 0) return f;
+  final name = f.substring(0, i), code = f.substring(i + 2);
+  final n = hasString('ind_$name') ? tr(lang, 'ind_$name') : name;
+  final c = hasString('c_$code') ? tr(lang, 'c_$code') : code;
+  return '$n — $c';
+}
+
+/// The direct chart reading as text: (headline e.g. "صعود ↑ · قوية", next step, detail lines).
+(String, String, List<String>) readText(String lang, Map? read) {
+  String t(String k) => tr(lang, k);
+  if (read == null || read['strength'] == 'none') return (t('read_none'), '', const []);
+  final bias = read['bias'] as String? ?? 'unclear';
+  final strength = read['strength'] as String? ?? 'weak';
+  final head = bias == 'unclear' ? t('read_unclear') : '${t('read_$bias')} · ${t('read_s_$strength')}';
+  final next = (read['next'] as Map?) ?? const {};
+  final lines = <String>[];
+  String step;
+  switch (next['action']) {
+    case 'buy':
+      step = t('read_buy');
+      if (next['watch'] != null) lines.add(t('read_watch_res').replaceAll('{p}', '${next['watch']}'));
+    case 'sell':
+      step = t('read_sell');
+      if (next['watch'] != null) lines.add(t('read_watch_sup').replaceAll('{p}', '${next['watch']}'));
+    default:
+      step = t('read_wait_break');
+      if (next['above'] == null && next['below'] == null) {
+        lines.add(t('read_break_any'));
+      } else {
+        if (next['above'] != null) lines.add(t('read_break_up').replaceAll('{p}', '${next['above']}'));
+        if (next['below'] != null) lines.add(t('read_break_down').replaceAll('{p}', '${next['below']}'));
+      }
+  }
+  return (head, step, lines);
+}

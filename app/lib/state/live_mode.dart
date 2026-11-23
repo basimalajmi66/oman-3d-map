@@ -9,6 +9,7 @@ import 'dart:typed_data';
 
 import '../core/engine_api.dart';
 import '../core/image_prep.dart';
+import '../l10n/strings.dart';
 import '../platform/screen_capture.dart';
 import 'app_state.dart';
 
@@ -168,7 +169,13 @@ class LiveMode {
     final code = a['reason_code'] as String?;
     final t = _now();
     String two(int v) => v.toString().padLeft(2, '0');
+    final read = (a['read'] as Map?)?.cast<String, dynamic>();
+    final (head, step, lines) = readText(state.lang, read);
     return {
+      'read_bias': read?['bias'],
+      'read_head': head,
+      'read_step': step,
+      'read_lines': lines,
       'signal': a['signal'] ?? 'WAIT',
       'reason': code == null ? null : state.t('reason_$code'),
       'quality': a['data_quality'],

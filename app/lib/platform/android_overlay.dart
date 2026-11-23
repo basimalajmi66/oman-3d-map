@@ -47,7 +47,7 @@ class AndroidOverlayController implements OverlayController {
 
   @override
   Future<void> show() => FlutterOverlayWindow.showOverlay(
-        height: 420,
+        height: 600,
         width: 620,
         alignment: OverlayAlignment.topRight,
         enableDrag: true,

@@ -7,7 +7,7 @@ import '../../l10n/strings.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
 import 'quick_start_screen.dart';
-import 'signal_details.dart' show decisionSteps, strategyEvidence;
+import 'signal_details.dart' show decisionSteps, readCard, strategyEvidence;
 
 /// Result of reading one chart image: the recommendation (WAIT until the signal
 /// engine exists), why, and exactly what the reader extracted — with an option
@@ -30,6 +30,12 @@ Future<void> showChartResult(BuildContext context, Json result) {
         width: 460,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // what the chart says first; the tested-strategy signal below it
+            if (analysis['read'] is Map) ...[
+              readCard(app, analysis['read'] as Map),
+              const SizedBox(height: 10),
+              Text(app.t('read_strategy'), style: const TextStyle(fontSize: 12)),
+            ],
             Container(
               key: const Key('chart_result_signal'),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
