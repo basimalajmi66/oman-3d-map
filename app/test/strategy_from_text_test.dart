@@ -2,11 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:uata_app/engine/strategy/from_text.dart';
 import 'package:uata_app/state/app_state.dart';
+import 'package:uata_app/l10n/strings.dart';
+import 'package:uata_app/ui/screens/knowledge_screen.dart';
 import 'package:uata_app/ui/screens/training_screen.dart';
 
 import 'fake_engine.dart';
 
 void main() {
+  patternRulesTests();
   test('trade duration from the text', () {
     expect(durationFromText('ادخل شراء لمدة دقيقتين'), 120);
     expect(durationFromText('بيع لمدة 3 دقائق'), 180);
@@ -76,5 +79,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('strategy_nothing')), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byKey(const Key('strategy_save'))).onPressed, isNull);
+  });
+}
+
+void patternRulesTests() {
+  testWidgets('video with several chart patterns: "separate" makes one tested strategy per pattern, names never clash',
+      (tester) async {
+    final e = FakeEngine();
+    tester.view.physicalSize = const Size(1000, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final state = AppState(engine: e, window: FakeWindow(), pollInterval: null);
+    await state.init();
+    e.datasets
+      ..clear()
+      ..add({'id': 900, 'name': 'XAUUSD 30s', 'timeframe_sec': 30, 'is_synthetic': 0})
+      ..add({'id': 950, 'name': 'USDJPY 30s', 'timeframe_sec': 30, 'is_synthetic': 0});
+    // a strategy with the first name already exists (an earlier attempt)
+    e.strategies.add({'id': 800, 'name': 'كسر نموذج القمة المزدوجة (بيع)', 'status': 'draft', 'version': 1});
+    e.sources.add({
+      'id': 1, 'title': 'video.mp4', 'kind': 'video', 'extraction_status': 'done', 'tags': [], 'created_at': null,
+      'items': [
+        for (final (k, t) in [
+          (11, 'Number one, the double top. When it breaks the neckline, sellers take over.'),
+          (12, 'Number two, the double bottom, the opposite. Break above the neckline and buyers are back.'),
+          (13, 'Number three, head and shoulders. Once the neckline breaks, the trend is done.'),
+        ])
+          {'id': k, 'item_type': 'rule', 'status': 'approved', 'title': 'rule', 'content': t},
+      ],
+    });
+    await tester.pumpWidget(AppScope(state: state, child: const MaterialApp(home: KnowledgeScreen())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('video.mp4').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rules_to_strategy')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rules_separate')));
+    await tester.pumpAndSettle();
+    // two price sets: the user is asked, and picks gold
+    await tester.tap(find.byKey(const Key('data_900')));
+    await tester.pumpAndSettle();
+    final created = [for (final c in e.calls) if (c.startsWith('create_strategy:')) c.substring(16)];
+    expect(created, ['كسر نموذج القمة المزدوجة (بيع) (2)', 'كسر نموذج القاع المزدوج (شراء)', 'كسر نموذج الرأس والكتفين (بيع)']);
+    expect(e.calls.where((c) => c.startsWith('backtest:') && c.endsWith(':900')), hasLength(3));
+    expect(find.text(tr('ar', 'strategies_created')), findsOneWidget);
   });
 }

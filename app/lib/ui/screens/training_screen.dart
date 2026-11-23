@@ -71,14 +71,49 @@ class TrainingScreen extends StatelessWidget {
 /// the approve button). Used by "new strategy" (own words) and by the library (approved rules).
 /// Several rules (e.g. five chart patterns from one video) as SEPARATE strategies: each is created and tested on
 /// the latest real data, then one list shows every result (out-of-sample win rate) with a tap to open each.
-Future<void> createTestSeveral(BuildContext context, AppState app, List<(String, Json)> strategies) async {
+/// The real price data (at the analysis timeframe) to test on: asked when there is more than one
+/// (e.g. gold and USD/JPY), so a strategy is never silently tested on the wrong asset. null = none / cancelled.
+Future<Json?> pickTestData(BuildContext context, AppState app) async {
   final tf = app.settings['candle_timeframe_sec'];
   final data = [for (final d in await app.engine.listDatasets()) if (d['timeframe_sec'] == tf && d['is_synthetic'] != 1) d]
     ..sort((a, b) => (b['id'] as int).compareTo(a['id'] as int));
+  if (data.length <= 1 || !context.mounted) return data.firstOrNull;
+  return showDialog<Json>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: Text(app.t('pick_test_data')),
+      children: [
+        for (final d in data)
+          SimpleDialogOption(
+            key: Key('data_${d['id']}'),
+            onPressed: () => Navigator.pop(ctx, d),
+            child: Text('${d['name']}'),
+          ),
+      ],
+    ),
+  );
+}
+
+/// `base`, or `base (2)`, `base (3)`… — strategy names must be unique.
+String uniqueStrategyName(String base, Iterable<String> taken) {
+  final used = taken.toSet();
+  if (!used.contains(base)) return base;
+  for (var k = 2;; k++) {
+    final n = '$base ($k)';
+    if (!used.contains(n)) return n;
+  }
+}
+
+Future<void> createTestSeveral(BuildContext context, AppState app, List<(String, Json)> strategies) async {
+  final picked = await pickTestData(context, app);
+  final data = [?picked];
   final made = <Json>[];
   if (!context.mounted) return;
   await runWithFeedback(context, () async {
-    for (final (name, def) in strategies) {
+    final taken = [for (final s in await app.engine.listStrategies()) '${s['name']}'];
+    for (final (base, def) in strategies) {
+      final name = uniqueStrategyName(base, taken);
+      taken.add(name);
       final s = await app.engine.createStrategy(name, def);
       if (data.isNotEmpty) await app.engine.backtest(s['id'] as int, data.first['id'] as int);
       made.add(await app.engine.getStrategy(s['id'] as int));
@@ -119,12 +154,14 @@ Future<void> createTestSeveral(BuildContext context, AppState app, List<(String,
 
 Future<void> createTestAndOpen(BuildContext context, AppState app, String name, Json definition) async {
   Json? s;
-  final ok = await runWithFeedback(context, () async => s = await app.engine.createStrategy(name, definition));
+  final ok = await runWithFeedback(context, () async {
+    final taken = [for (final x in await app.engine.listStrategies()) '${x['name']}'];
+    s = await app.engine.createStrategy(uniqueStrategyName(name, taken), definition);
+  });
   if (!ok || s == null || !context.mounted) return;
   final id = s!['id'] as int;
-  final tf = app.settings['candle_timeframe_sec'];
-  final data = [for (final d in await app.engine.listDatasets()) if (d['timeframe_sec'] == tf && d['is_synthetic'] != 1) d]
-    ..sort((a, b) => (b['id'] as int).compareTo(a['id'] as int));
+  final picked = await pickTestData(context, app);
+  final data = [?picked];
   if (!context.mounted) return;
   if (data.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.t('strategy_no_data_for_tf'))));

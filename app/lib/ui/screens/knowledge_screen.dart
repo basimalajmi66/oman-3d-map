@@ -3,6 +3,7 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/engine_api.dart';
+import '../../engine/strategy/conditions.dart' show describe;
 import '../../engine/strategy/from_text.dart';
 import '../../state/app_state.dart';
 import '../theme.dart';
@@ -182,7 +183,11 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
     for (final it in items) {
       if (it['item_type'] != 'rule' || it['status'] != 'approved') continue;
       final (d, u, _) = strategyFromText((it['content'] as String? ?? '').trim());
-      if (u.isNotEmpty) single.add(('$title — ${single.length + 1}', d));
+      if (u.isEmpty) continue;
+      // named after what it trades, e.g. "كسر نموذج القمة المزدوجة (بيع)"
+      final first = [...(d['long'] as Map)['all'] as List, ...(d['short'] as Map)['all'] as List];
+      final label = first.isEmpty ? '$title — ${single.length + 1}' : describe((first.first as Map).cast<String, dynamic>(), app.lang);
+      single.add((label, d));
     }
     var separate = false;
     if (single.length > 1) {

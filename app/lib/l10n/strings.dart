@@ -216,6 +216,7 @@ const Map<String, Map<String, String>> _strings = {
   'strategy_untestable': {'ar': 'لا يمكن اختباره', 'en': 'Cannot be tested'},
   'strategy_nothing_testable': {'ar': 'لم أجد شروطاً قابلة للاختبار. استخدم كلمات مثل: RSI، تشبع بيعي/شرائي، دعم/مقاومة، اتجاه صاعد/هابط، تقاطع MACD، بولينجر، اختراق، زخم، ابتلاع، مطرقة، دوجي — مع «شراء» أو «بيع».', 'en': 'No testable conditions found. Use words like RSI, oversold/overbought, support/resistance, uptrend/downtrend, MACD cross, Bollinger, breakout, momentum, engulfing, hammer, doji — with "buy" or "sell".'},
   'strategy_no_data_for_tf': {'ar': 'لا توجد أسعار تاريخية لهذا الإطار الزمني لاختبارها — شغّل «البدء السريع» أولاً ثم افتح الاستراتيجية واضغط «اختبار»', 'en': 'No price history for this timeframe to test on — run quick start first, then open the strategy and press "Backtest"'},
+  'pick_test_data': {'ar': 'اختر أسعار الاختبار (الأصل الذي تتداوله)', 'en': 'Choose the prices to test on (the asset you trade)'},
   'strategy_only': {'ar': 'اعتماد شروط الاستراتيجية وحدها', 'en': 'Strategy conditions alone'},
   'strategy_only_hint': {
     'ar': 'الإشارة تظهر متى تحققت شروط استراتيجية معتمدة ومختبرة، كما اختُبرت تماماً. توافق العوامل الأخرى يُعرض في التفاصيل ولا يُشترط. التنفيذ يبقى يدوياً.',
