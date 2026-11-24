@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/engine_api.dart';
-import '../../l10n/strings.dart' show hasString;
+import '../../l10n/strings.dart' show factorText, hasString;
 import '../../state/app_state.dart';
 import '../theme.dart';
 import 'signal_details.dart';
@@ -283,8 +283,12 @@ class _ResultDialogState extends State<_ResultDialog> {
 
 /// Why a WAIT was given (its reason code), in the user's language — shown right in the list.
 String? _waitReason(AppState app, Map g) {
-  if (g['signal'] != 'WAIT') return null;
   final rs = g['reasons'];
+  // a pattern signal: which patterns
+  if (g['signal'] != 'WAIT' && rs is List && rs.isNotEmpty && '${rs.first}'.startsWith('setup: ')) {
+    return '${app.t('pattern_signal_tag')}: ${[for (final r in rs) factorText(app.lang, '$r').replaceFirst('${app.t('ind_setup')} — ', '')].join('، ')}';
+  }
+  if (g['signal'] != 'WAIT') return null;
   final code = rs is List && rs.isNotEmpty ? '${rs.first}' : null;
   if (code == null || !hasString('reason_$code')) return null;
   return app.t('reason_$code');

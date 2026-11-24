@@ -286,6 +286,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _dropdown<int>('trade_duration_max_sec', app.t('max_duration'), _durations, (v) => '$v$secs'),
         _dropdown<int>('signal_cooldown_sec', app.t('cooldown'), _cooldowns, (v) => '$v$secs'),
         SwitchListTile(
+          key: const Key('sw_pattern_signals'),
+          title: Text(app.t('pattern_signals')),
+          subtitle: Text(app.t('pattern_signals_hint'), style: const TextStyle(fontSize: 12)),
+          value: s['pattern_signals'] != false,
+          onChanged: (v) => _set('pattern_signals', v),
+        ),
+        SwitchListTile(
           key: const Key('sw_strategy_only'),
           title: Text(app.t('strategy_only')),
           subtitle: Text(app.t('strategy_only_hint'), style: const TextStyle(fontSize: 12)),

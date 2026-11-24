@@ -13,25 +13,34 @@ library;
 
 import 'dart:math' as math;
 
-import '../strategy/chart_patterns.dart';
 import '../strategy/features.dart';
-
-const _patternSide = {
-  'double_top': 'down', 'double_bottom': 'up', 'head_shoulders': 'down', //
-  'bull_flag': 'up', 'ascending_triangle': 'up', 'gap_retest_bull': 'up', 'gap_retest_bear': 'down',
-};
+import 'setups.dart';
 
 double _n(Object? v) => (v as num?)?.toDouble() ?? 0.0;
 
-/// Chart-pattern breaks on the last closed candle (empty when there are too few candles).
-List<String> patternBreaks(Map reading) {
+/// Every collected strategy (setup) that shows on the last closed candle (empty with fewer than 30 candles).
+List<SetupHit> readingSetups(Map reading) {
   final closed = [for (final c in (reading['candles'] as List? ?? const [])) if ((c as Map)['status'] == 'closed') c];
   if (closed.length < 30) return const [];
   final prefix = closed.every((c) => c.containsKey('close')) ? '' : 'rel_';
   List<double> col(String k) => [for (final c in closed) _n(c['$prefix$k'])];
-  final fs = FeatureSet(col('open'), col('high'), col('low'), col('close'));
-  final i = fs.n - 1;
-  return [for (final e in chartPatterns.entries) if (e.value(fs, i)) e.key];
+  return detectSetups(FeatureSet(col('open'), col('high'), col('low'), col('close')));
+}
+
+/// The direct signal from the setups (chart / price-action setups weigh 1.0, candle patterns 0.6): a side needs at
+/// least 1.0 (one chart / price-action setup, or two candle patterns) and twice the weight of the other side.
+String? setupSignal(List<SetupHit> hits) {
+  var buy = 0.0, sell = 0.0;
+  for (final h in hits) {
+    if (h.side == 'BUY') {
+      buy += h.weight;
+    } else {
+      sell += h.weight;
+    }
+  }
+  if (buy >= 1.0 && buy >= 2 * sell) return 'BUY';
+  if (sell >= 1.0 && sell >= 2 * buy) return 'SELL';
+  return null;
 }
 
 Map<String, dynamic> chartRead(Map reading, Map? technical, {int? durationSec}) {
@@ -56,22 +65,26 @@ Map<String, dynamic> chartRead(Map reading, Map? technical, {int? durationSec}) 
       forDown.add(label);
     }
   }
-  // a chart pattern breaking on the last closed candle is the strongest single clue
-  final breaks = patternBreaks(reading);
-  for (final b in breaks) {
-    if (_patternSide[b] == 'up') {
-      up += 1.5;
-      forUp.insert(0, 'chart_pattern: $b');
+  // the collected strategies (candle patterns, chart patterns, price action) on the last closed candle
+  final hits = readingSetups(reading);
+  for (final h in hits) {
+    if (h.side == 'BUY') {
+      up += 1.5 * h.weight;
+      forUp.insert(0, 'setup: ${h.name}');
     } else {
-      down += 1.5;
-      forDown.insert(0, 'chart_pattern: $b');
+      down += 1.5 * h.weight;
+      forDown.insert(0, 'setup: ${h.name}');
     }
   }
+  final signal = setupSignal(hits);
   final total = up + down;
   final margin = total == 0 ? 0.0 : (up - down) / total; // −1 … +1
-  final bias = margin >= 0.2 ? 'up' : margin <= -0.2 ? 'down' : 'unclear';
+  // a setup gives the direction directly; otherwise the balance of the factors
+  final bias = signal == 'BUY' ? 'up' : signal == 'SELL' ? 'down' : margin >= 0.2 ? 'up' : margin <= -0.2 ? 'down' : 'unclear';
   final m = margin.abs();
-  final strength = bias == 'unclear' ? 'weak' : m >= 0.6 && total >= 2.0 ? 'strong' : m >= 0.35 ? 'medium' : 'weak';
+  final strength = bias == 'unclear'
+      ? 'weak'
+      : (m >= 0.6 && total >= 2.0) || (signal != null && m >= 0.35) ? 'strong' : m >= 0.35 || signal != null ? 'medium' : 'weak';
 
   // nearest levels above / below the last close (only meaningful when prices were read)
   final priced = technical['units'] == 'price';
@@ -100,7 +113,8 @@ Map<String, dynamic> chartRead(Map reading, Map? technical, {int? durationSec}) 
     'next': next,
     'bullish': forUp,
     'bearish': forDown,
-    'patterns': breaks,
+    'signal': signal, // BUY / SELL when a collected strategy shows on the last closed candle
+    'setups': [for (final h in hits) h.toJson()],
     'market': technical['market_condition'],
     'trend': (technical['trend'] as Map?)?['direction'],
   };

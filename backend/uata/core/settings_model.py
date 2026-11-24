@@ -58,6 +58,9 @@ class Settings(BaseModel):
     # opt-in: signal on an approved, tested strategy's own conditions (exactly as backtested); the factor
     # agreement is then shown but not required (its filter was never part of the backtest)
     strategy_only_signals: bool = False
+    # the phone engine gives a direct signal when a collected strategy (pattern) shows on the chart (untested);
+    # the computer engine keeps the setting so both share one settings file
+    pattern_signals: bool = True
     signal_cooldown_sec: int = Field(30, ge=0, le=3600)   # no repeat without new analysis
 
     # --- indicators (section 6) — each one can be switched on/off

@@ -44,6 +44,9 @@ Future<void> showChartResult(BuildContext context, Json result) {
             ),
             const SizedBox(height: 8),
             if (reason != null) Text(app.t('reason_$reason'), key: const Key('chart_result_reason')),
+            if (reason == 'pattern_signal')
+              ...((analysis['reasons'] as List?) ?? const []).map((r) => Text('• ${factorText(app.lang, '$r')}',
+                  style: const TextStyle(fontWeight: FontWeight.w600))),
             if (reason == 'no_approved_strategy')
               Padding(
                 padding: const EdgeInsets.only(top: 6),

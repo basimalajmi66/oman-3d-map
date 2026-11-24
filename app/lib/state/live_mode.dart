@@ -177,7 +177,11 @@ class LiveMode {
       'read_step': step,
       'read_lines': lines,
       'signal': a['signal'] ?? 'WAIT',
-      'reason': code == null ? null : state.t('reason_$code'),
+      'reason': code == 'pattern_signal'
+          ? '${state.t('pattern_signal_tag')}: ${[for (final r in (a['reasons'] as List? ?? const [])) factorText(state.lang, '$r').replaceFirst('${state.t('ind_setup')} — ', '')].join('، ')}'
+          : code == null
+              ? null
+              : state.t('reason_$code'),
       'quality': a['data_quality'],
       'duration_sec': a['duration_sec'],
       'confidence': a['confidence'],

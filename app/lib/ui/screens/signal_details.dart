@@ -95,7 +95,7 @@ Future<void> showSignalDetails(BuildContext context, {Json? signal}) {
   final reasons = <String>[
     if (reasonCode != null && hasString('reason_$reasonCode')) app.t('reason_$reasonCode'),
     ...((rec['reasons'] as List?)?.cast<String>() ?? const [])
-        .map((r) => hasString('reason_$r') ? app.t('reason_$r') : r),
+        .map((r) => hasString('reason_$r') ? app.t('reason_$r') : r.contains(': ') ? factorText(app.lang, r) : r),
   ];
   // factors are stored as "indicator: code" — shown in the user's language when known
   String factor(String f) {

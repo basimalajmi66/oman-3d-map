@@ -31,6 +31,7 @@ Map<String, dynamic> defaultSettings() => {
       'min_data_quality_to_signal': 0.6,
       'min_confluence_factors': 3,
       'strategy_only_signals': false,
+      'pattern_signals': true, // a collected strategy (pattern) on the chart gives a direct signal (untested)
       'signal_cooldown_sec': 30,
       'indicators': {for (final n in indicatorNames) n: true},
       'language': 'ar',
@@ -90,6 +91,7 @@ Map<String, dynamic> validateSettings(Map input) {
   s['min_data_quality_to_signal'] = _float(s, 'min_data_quality_to_signal', 0.3, 1.0);
   _int(s, 'min_confluence_factors', 2, 10);
   _bool(s, 'strategy_only_signals');
+  _bool(s, 'pattern_signals');
   _int(s, 'signal_cooldown_sec', 0, 3600);
   final ind = s['indicators'];
   if (ind is! Map) throw SettingsError('indicators must be a map');

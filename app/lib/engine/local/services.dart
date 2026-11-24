@@ -258,7 +258,23 @@ class SignalService {
     out['repeated'] = repeated;
     out['recorded'] = false;
     // the chart's own reading (direction + next step), shown apart from the strategy signal
-    out['read'] = chartRead(reading, technical, durationSec: s['trade_duration_min_sec'] as int?);
+    final read = chartRead(reading, technical, durationSec: s['trade_duration_min_sec'] as int?);
+    out['read'] = read;
+    // a collected strategy (pattern) on the last closed candle gives a direct BUY / SELL when no tested strategy did
+    // (setting "pattern_signals"); the chart itself must be valid (step 1 passed), and the repeat cooldown applies
+    final chartValid = !const ['image_quality_insufficient', 'timeframe_mismatch'].contains(d.reasonCodes.firstOrNull);
+    if (s['pattern_signals'] == true && out['signal'] == 'WAIT' && read['signal'] != null && chartValid && !inCooldown) {
+      final hits = [for (final h in read['setups'] as List) h as Map];
+      out
+        ..['signal'] = read['signal']
+        ..['reason_code'] = 'pattern_signal'
+        ..['reason_codes'] = ['pattern_signal', ...(out['reason_codes'] as List)]
+        ..['reasons'] = [for (final h in hits) if (h['side'] == read['signal']) 'setup: ${h['name']}']
+        ..['duration_sec'] = s['trade_duration_min_sec']
+        ..['supporting'] = [...(read[read['signal'] == 'BUY' ? 'bullish' : 'bearish'] as List)]
+        ..['opposing'] = [...(read[read['signal'] == 'BUY' ? 'bearish' : 'bullish'] as List)]
+        ..['pattern_signal'] = true;
+    }
     if (!repeated && reading['usable'] == true) {
       _lastFp[stream] = fp;
       final reasons = (out['reasons'] as List).isEmpty ? [out['reason_code'] ?? 'wait'] : out['reasons'] as List;
@@ -267,7 +283,10 @@ class SignalService {
           reasons: reasons, supporting: out['supporting'] as List, opposing: out['opposing'] as List,
           dataQuality: (out['data_quality'] as num?)?.toDouble(), confidence: (out['confidence'] as num?)?.toDouble(),
           durationSec: out['duration_sec'] as int?, asset: asset, strategyId: (out['strategy'] as Map?)?['id'] as int?,
-          sessionId: sessionId, minConfluence: s['min_confluence_factors'] as int,
+          sessionId: sessionId,
+          // the factor minimum guards tested-strategy signals; a pattern signal stands on its pattern, and
+          // "strategy conditions alone" on the tested strategy
+          minConfluence: out['pattern_signal'] == true || s['strategy_only_signals'] == true ? 1 : s['min_confluence_factors'] as int,
           marketCondition: technical?['market_condition'] as String?);
       out['signal_id'] = rec['id'];
       out['recorded'] = true;

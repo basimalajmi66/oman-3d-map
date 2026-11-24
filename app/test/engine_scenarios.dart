@@ -103,7 +103,15 @@ void engineScenarios(EngineApi Function() apiOf,
     expect(reading['usable'], true);
     expect(reading['candles'], 45);
     expect(reading['closed_candles'], 44);
-    expect((r['analysis'] as Map)['reason_code'], 'no_approved_strategy');
+    // no tested strategy; on the phone a collected pattern on the last candle may still give a pattern signal
+    final an = r['analysis'] as Map;
+    expect(an['reason_codes'], contains('no_approved_strategy'));
+    if (an['reason_code'] == 'pattern_signal') {
+      expect(an['signal'], anyOf('BUY', 'SELL'));
+      expect((an['reasons'] as List).first, startsWith('setup: '));
+    } else {
+      expect(an['reason_code'], 'no_approved_strategy');
+    }
     final technical = (r['analysis'] as Map)['technical'] as Map;
     expect(technical['available'], true);
     expect(technical['candles_used'], 44); // closed candles only
