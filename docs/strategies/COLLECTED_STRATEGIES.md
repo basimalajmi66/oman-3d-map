@@ -57,6 +57,8 @@
   - التأكيد: تراجع (Pullback) يعود إلى منطقة الفجوة فوق المستوى المكسور، ثم الدخول مع الاتجاه.
   - التعريف مطابق لما بُني في البرنامج (`gap_retest`: فجوة بين الشمعة j-2 والشمعة j، ثم أول عودة إليها وإغلاق في اتجاه الحركة).
   - تحسين مقترح: اشتراط أن تكون الفجوة ناتجة عن **اختراق مستوى** (دعم أو مقاومة)، كما في الفيديو.
+  - **نص الشاشة كاملاً (OCR):** «Never buy this candle. You should never enter after this move. When a candle breaks a level, most traders want to buy the breakout. This move is only a signal — just the signal. What we need now is a confirmation, and this confirmation is a pullback. When price moves that fast, it creates an imbalance: a big gap between two candles. This gap is often retested. We simply wait for price to reach the gap, and then we enter with confidence.»
+  - **في آخر لقطة:** علامة **ENTRY** عند المستوى المكسور، وعلامة **CONFIRMED** على شمعة الارتداد من الفجوة. أي أن الدخول بعد إغلاق شمعة الارتداد، لا عند مجرد لمس الفجوة.
 
 ---
 
