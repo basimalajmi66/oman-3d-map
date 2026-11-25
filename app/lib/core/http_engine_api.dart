@@ -141,7 +141,7 @@ class HttpEngineApi implements EngineApi {
   Future<Json> emergencyStop() async => _map(await _post('/analysis/emergency-stop'));
 
   @override
-  Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload'}) async =>
+  Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload', bool readPrices = true}) async =>
       _map(await _multipart('/analysis/inputs', image, {'input_mode': inputMode}));
   @override
   Future<List<Json>> listChartInputs({int limit = 50}) async =>

@@ -56,7 +56,9 @@ abstract class EngineApi {
 
   // chart images for analysis (upload / share / screenshot)
   /// [inputMode]: 'upload', 'share', 'screenshot' or 'screen_region'.
-  Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload'});
+  /// `readPrices: false` skips reading the price axis (faster — live analysis over the trading app does not need
+  /// prices to find patterns).
+  Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload', bool readPrices = true});
   Future<List<Json>> listChartInputs({int limit = 50});
   /// One screenshot (screen or configured region), read immediately. Needs screen permission.
   Future<Json> captureScreen();

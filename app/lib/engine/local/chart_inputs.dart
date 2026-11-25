@@ -73,7 +73,8 @@ class ChartInputService {
   }
 
   Future<Map<String, dynamic>> submit(Uint8List data, String? filename, String inputMode,
-      {required bool screenAllowed, int? sessionId, required double minQuality, required Map<String, bool> enabled}) async {
+      {required bool screenAllowed, int? sessionId, required double minQuality, required Map<String, bool> enabled,
+      bool readPrices = true}) async {
     if (!chartInputModes.contains(inputMode)) throw badRequest('input_mode must be one of $chartInputModes');
     if ({'screenshot', 'screen_region'}.contains(inputMode) && !screenAllowed) {
       throw EngineException(403, 'screen capture permission has not been granted by the user');
@@ -81,7 +82,7 @@ class ChartInputService {
     if (data.isEmpty) throw EngineException(422, 'empty file');
     if (data.length > maxImageBytes) throw EngineException(422, 'image too large (max 25 MB)');
     final maxCandles = signals.settings.get()['chart_max_candles'] as int;
-    final withAxis = ocr != null;
+    final withAxis = ocr != null && readPrices; // reading the price axis (OCR) is the slowest step
     final r = await Isolate.run(() => _process(data, minQuality, enabled, maxCandles, withAxis));
     if (r['error'] != null) throw EngineException(422, r['error'] as String);
     final png = r['png'] as Uint8List;

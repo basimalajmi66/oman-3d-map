@@ -41,6 +41,16 @@ class LiveMode {
   int? _lastCandle;
   Json _last = const {};
 
+  /// Fast reading (default): a smaller picture and no price-axis OCR — patterns need neither.
+  bool fast = true;
+
+  /// The account the one-tap results go to (the user trades on demo first).
+  String account = 'demo';
+
+  /// Trades from signals waiting for their result: {id, side, label, expires_at (ms)}; the floating window asks
+  /// "won / lost / draw?" once a trade's time is up.
+  final List<Json> pending = [];
+
   bool get active => state.liveActive;
 
   /// Starts live analysis: overlay permission, Android's screen-sharing prompt, then the floating window.
@@ -94,7 +104,49 @@ class LiveMode {
         await setFrame();
       case 'hello':
         await _push(); // the floating window just started: give it the live state
+      case 'fast':
+        fast = msg['on'] == true;
+        await _push();
+      case 'account':
+        if (const ['demo', 'real'].contains(msg['value'])) account = msg['value'] as String;
+        await _push();
+      case 'set_tf':
+        await _setting({'candle_timeframe_sec': msg['value']});
+      case 'set_dur':
+        final d = msg['value'] as int;
+        final max = state.settings['trade_duration_max_sec'] as int? ?? d;
+        await _setting({'trade_duration_min_sec': d, if (max < d) 'trade_duration_max_sec': d});
+      case 'result':
+        await recordResult(msg['id'] as int?, msg['outcome'] as String?);
+      case 'skip_result':
+        pending.removeWhere((p) => p['id'] == msg['id']);
+        await _push();
     }
+  }
+
+  Future<void> _setting(Json patch) async {
+    try {
+      await state.updateSettings(patch);
+      _last = {..._last, 'error': null};
+    } on EngineException catch (e) {
+      _last = {..._last, 'error': e.message};
+    }
+    await _push();
+  }
+
+  /// One tap in the floating window: the result of a trade taken from a signal (demo / real as chosen there).
+  Future<void> recordResult(int? id, String? outcome) async {
+    if (id == null || !const ['win', 'loss', 'draw'].contains(outcome)) return;
+    final p = pending.where((x) => x['id'] == id).firstOrNull;
+    try {
+      await state.engine.resultFromSignal(id, accountType: account, outcome: outcome!, notes: p?['label'] as String?);
+      pending.removeWhere((x) => x['id'] == id);
+      _last = {..._last, 'error': null, 'note': '${state.t('live_result_saved')}: ${state.t(outcome)}'};
+    } on EngineException catch (e) {
+      pending.removeWhere((x) => x['id'] == id);
+      _last = {..._last, 'error': e.message};
+    }
+    await _push();
   }
 
   void setAuto(bool on) {
@@ -104,12 +156,12 @@ class LiveMode {
     unawaited(_push());
   }
 
-  /// Automatic mode: once per candle, 2 s after it closed (the platform has drawn the closed candle by then).
+  /// Automatic mode: once per candle, 1 s after it closed (the platform has drawn the closed candle by then).
   Future<void> tick() async {
     final tf = state.settings['candle_timeframe_sec'] as int? ?? 30;
     final t = _now().millisecondsSinceEpoch ~/ 1000;
     final candle = t ~/ tf;
-    if (t % tf >= 2 && t % tf <= 6 && candle != _lastCandle && !busy) {
+    if (t % tf >= 1 && t % tf <= 6 && candle != _lastCandle && !busy) {
       _lastCandle = candle;
       await analyzeNow();
     }
@@ -151,8 +203,17 @@ class LiveMode {
         return;
       }
       final image = UploadFile(name: 'screen.png', length: png.length, openRead: () => Stream.value(png));
-      final r = await state.analyzeChart(image, inputMode: 'screenshot', crop: await crop());
+      final r = await state.analyzeChart(image, inputMode: 'screenshot', crop: await crop(), fast: fast);
       _last = summarise(r);
+      final a = (r['analysis'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final dur = a['duration_sec'] as int?;
+      if (a['signal'] != 'WAIT' && a['signal'] != null && a['signal_id'] != null && a['recorded'] == true && dur != null) {
+        pending.add({
+          'id': a['signal_id'], 'side': a['signal'], 'label': _last['reason'],
+          'expires_at': _now().millisecondsSinceEpoch + dur * 1000,
+        });
+        if (pending.length > 5) pending.removeAt(0);
+      }
     } on EngineException catch (e) {
       _last = {'error': e.message};
     } finally {
@@ -187,6 +248,7 @@ class LiveMode {
       'confidence': a['confidence'],
       'confidence_calibrated': a['confidence_calibrated'] == true,
       'price': summary?['last_closed_close'],
+      'signal_at': t.millisecondsSinceEpoch,
       'time': '${two(t.hour)}:${two(t.minute)}:${two(t.second)}',
     };
   }
@@ -201,6 +263,10 @@ class LiveMode {
       'busy': working || busy,
       'auto': auto,
       'timeframe_sec': state.settings['candle_timeframe_sec'],
+      'duration_min_sec': state.settings['trade_duration_min_sec'],
+      'fast': fast,
+      'account': account,
+      'pending': pending,
       'signal': 'WAIT',
       ..._last,
     });

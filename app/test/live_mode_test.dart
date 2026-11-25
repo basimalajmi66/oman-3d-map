@@ -103,8 +103,8 @@ void main() {
     await live.start();
     live.setAuto(true);
     expect(o.pushed.last['auto'], true);
-    // 30 s candles: 10:00:00 is a close; ticks at +1 (too early), +3 (yes), +4 (same candle), +33 (next candle)
-    for (final s in [1, 3, 4, 20, 33]) {
+    // 30 s candles: 10:00:00 is a close; ticks at +0 (too early), +1 (yes), +4 (same candle), +20 (too late), +31 (next)
+    for (final s in [0, 1, 4, 20, 31]) {
       clock = DateTime(2026, 11, 21, 10, 0, s);
       await live.tick();
       await settle(live);
@@ -113,6 +113,71 @@ void main() {
     await live.handle({'cmd': 'stop'});
     expect(state.liveActive || o.active || screen.on, isFalse);
     live.setAuto(false);
+  });
+
+  test('fast reading by default; a pattern signal opens a trade that asks for its result once its time is up', () async {
+    await live.start();
+    e.analysisExtra = {'signal': 'BUY', 'signal_id': 77, 'recorded': true, 'duration_sec': 60, 'reason_code': 'pattern_signal',
+      'reasons': ['setup: hammer']};
+    commands.add({'cmd': 'analyze'});
+    await settle(live);
+    expect(e.calls.last, endsWith(':fast')); // no price-axis reading
+    expect(live.pending.single['id'], 77);
+    expect(o.pushed.last['pending'], isNotEmpty);
+    expect(o.pushed.last['reason'], contains(tr('ar', 'c_hammer')));
+    // the result, one tap: recorded on the chosen account
+    await live.handle({'cmd': 'account', 'value': 'real'});
+    await live.handle({'cmd': 'result', 'id': 77, 'outcome': 'win'});
+    expect(e.calls, contains('result_from_signal:77:real:win'));
+    expect(live.pending, isEmpty);
+    expect(o.pushed.last['note'], contains(tr('ar', 'win')));
+    // full reading when switched off
+    await live.handle({'cmd': 'fast', 'on': false});
+    e.analysisExtra = {};
+    commands.add({'cmd': 'analyze'});
+    await settle(live);
+    expect(e.calls.where((c) => c.startsWith('chart:')).last, isNot(endsWith(':fast')));
+  });
+
+  test('candle length and trade duration chosen in the window go to the settings', () async {
+    await live.start();
+    await live.handle({'cmd': 'set_tf', 'value': 60});
+    await live.handle({'cmd': 'set_dur', 'value': 300});
+    expect(e.settings['candle_timeframe_sec'], 60);
+    expect(e.settings['trade_duration_min_sec'], 300);
+    expect((e.settings['trade_duration_max_sec'] as int) >= 300, isTrue);
+    expect(o.pushed.last['timeframe_sec'], 60);
+    expect(o.pushed.last['duration_min_sec'], 300);
+  });
+
+  testWidgets('floating window: candle countdown, "enter now", then the result buttons when the trade is over', (tester) async {
+    final updates = StreamController<dynamic>();
+    final sent = <Map>[];
+    var now = DateTime(2026, 11, 21, 10, 0, 10);
+    await tester.pumpWidget(OverlayApp(updates: updates.stream, onClose: () {}, send: sent.add, now: () => now));
+    final at = now.millisecondsSinceEpoch;
+    updates.add({'live': true, 'lang': 'ar', 'signal': 'BUY', 'duration_sec': 60, 'timeframe_sec': 30, 'duration_min_sec': 60,
+      'signal_at': at, 'pending': [{'id': 5, 'side': 'BUY', 'expires_at': at + 60000}]});
+    await tester.pumpAndSettle();
+    expect(find.textContaining('0:20'), findsWidgets); // 20 s left in the candle
+    expect(find.textContaining(tr('ar', 'live_enter_now')), findsOneWidget);
+    expect(find.byKey(const Key('overlay_result_wait')), findsOneWidget);
+    // a minute later: a new candle (entry passed) and the trade is over → won / lost / draw
+    now = now.add(const Duration(seconds: 61));
+    updates.add({'live': true, 'lang': 'ar', 'signal': 'BUY', 'duration_sec': 60, 'timeframe_sec': 30, 'duration_min_sec': 60,
+      'signal_at': at, 'pending': [{'id': 5, 'side': 'BUY', 'expires_at': at + 60000}]});
+    await tester.pumpAndSettle();
+    expect(find.text(tr('ar', 'live_entry_passed')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('overlay_result_loss')));
+    await tester.tap(find.byKey(const Key('overlay_tf')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('60${tr('ar', 'seconds')}').last);
+    await tester.pumpAndSettle();
+    expect(sent, containsAll([
+      {'cmd': 'result', 'id': 5, 'outcome': 'loss'},
+      {'cmd': 'set_tf', 'value': 60},
+    ]));
+    await updates.close();
   });
 
   test('"set frame": the trading app is captured (window hidden) and handed to the crop screen', () async {

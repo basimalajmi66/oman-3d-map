@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../core/companion.dart';
@@ -173,9 +175,11 @@ class AppState extends ChangeNotifier {
   }
 
   /// Submit a chart image for analysis (upload, share or screenshot).
-  Future<Json> analyzeChart(UploadFile image, {String inputMode = 'upload', CropFrac? crop}) async {
-    final r = (await _guard(() async =>
-        engine.submitChartImage(await prepareChartImage(image, chartMaxSide, crop: crop), inputMode: inputMode)))!;
+  Future<Json> analyzeChart(UploadFile image, {String inputMode = 'upload', CropFrac? crop, bool fast = false}) async {
+    // fast (live over the trading app): a smaller picture and no price-axis reading — patterns need neither
+    final side = fast ? math.min(chartMaxSide, 1000) : chartMaxSide;
+    final r = (await _guard(() async => engine.submitChartImage(await prepareChartImage(image, side, crop: crop),
+        inputMode: inputMode, readPrices: !fast)))!;
     lastChartResult = r;
     notifyListeners();
     return r;

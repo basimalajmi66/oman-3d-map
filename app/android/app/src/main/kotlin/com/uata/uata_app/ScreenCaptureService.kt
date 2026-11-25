@@ -43,7 +43,9 @@ class ScreenCaptureService : Service() {
         private var reader: ImageReader? = null
         private var thread: HandlerThread? = null
 
-        /** The latest screen frame as PNG, or null when not running / no frame yet. */
+        private const val MAX_SIDE = 1600
+
+        /** The latest screen frame as PNG (longest side at most MAX_SIDE), or null when not running / no frame yet. */
         fun capture(): ByteArray? {
             val r = reader ?: return null
             val image = r.acquireLatestImage() ?: return null
@@ -53,10 +55,18 @@ class ScreenCaptureService : Service() {
                 val rowPadding = plane.rowStride - pixelStride * image.width
                 val padded = Bitmap.createBitmap(image.width + rowPadding / pixelStride, image.height, Bitmap.Config.ARGB_8888)
                 padded.copyPixelsFromBuffer(plane.buffer)
-                val bmp = Bitmap.createBitmap(padded, 0, 0, image.width, image.height)
+                val full = Bitmap.createBitmap(padded, 0, 0, image.width, image.height)
+                // PNG of a whole tablet screen is the slowest step of a live analysis; the chart reader works on
+                // at most ~1300 px anyway, so shrink first (the crop frame is in fractions, so it still fits)
+                val longest = maxOf(full.width, full.height)
+                val bmp = if (longest > MAX_SIDE) {
+                    val f = MAX_SIDE.toFloat() / longest
+                    Bitmap.createScaledBitmap(full, (full.width * f).toInt(), (full.height * f).toInt(), true)
+                } else full
                 val out = ByteArrayOutputStream()
                 bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
                 padded.recycle()
+                if (bmp !== full) full.recycle()
                 bmp.recycle()
                 return out.toByteArray()
             } finally {

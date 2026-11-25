@@ -266,14 +266,14 @@ class LocalEngineApi implements EngineApi {
       });
 
   @override
-  Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload'}) => _run(() async {
+  Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload', bool readPrices = true}) => _run(() async {
         if (engine.control.halted) throw EngineException(409, 'emergency stop is active; start analysis again first');
         final session = engine.control.currentSession();
         final s = engine.settings.get();
         final out = await engine.charts.submit(await _bytes(image), image.name, inputMode,
             screenAllowed: s['screen_capture_allowed'] as bool, sessionId: session?['id'] as int?,
             minQuality: (s['min_data_quality_to_signal'] as num).toDouble(),
-            enabled: (s['indicators'] as Map).cast<String, bool>());
+            enabled: (s['indicators'] as Map).cast<String, bool>(), readPrices: readPrices);
         engine.control.lastDecision = (out['analysis'] as Map).cast<String, dynamic>();
         return out;
       });

@@ -188,7 +188,7 @@ Timer? _paperTimer;
 @pragma('vm:entry-point')
 void overlayMain() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const OverlayApp());
+  runApp(const OverlayApp(ticker: Duration(seconds: 1)));
 }
 
 void _reportShares(AppState state, List<ShareOutcome> outcomes) {

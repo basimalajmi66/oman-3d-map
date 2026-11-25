@@ -155,9 +155,9 @@ class FakeEngine implements EngineApi {
   final List<Json> chartInputs = [];
 
   @override
-  Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload'}) async {
+  Future<Json> submitChartImage(UploadFile image, {String inputMode = 'upload', bool readPrices = true}) async {
     _check();
-    calls.add('chart:$inputMode:${image.name}');
+    calls.add('chart:$inputMode:${image.name}${readPrices ? '' : ':fast'}');
     if (halted) throw EngineException(409, 'halted');
     if (!image.name.endsWith('.png') && !image.name.endsWith('.jpg')) throw EngineException(422, 'not an image');
     final input = {'id': ++_id, 'input_mode': inputMode, 'width': 800, 'height': 450,
@@ -207,12 +207,16 @@ class FakeEngine implements EngineApi {
       'source_title': 'strategy.pdf', 'item_type': 'rule', 'score': 0.03},
   ];
 
+  /// Extra fields merged into every analysis (e.g. a BUY pattern signal for a test).
+  Json analysisExtra = {};
+
   Json _analysis() => {
         'knowledge': knowledge,
         'technical': technical,
         'signal': 'WAIT',
         'reason_code': reading['usable'] == true ? 'signal_engine_not_installed' : 'image_quality_insufficient',
         'data_basis': 'image_only', 'confidence': null, 'data_quality': reading['data_quality'], 'reading': reading,
+        ...analysisExtra,
       };
 
   @override
