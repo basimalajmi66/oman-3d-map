@@ -61,7 +61,6 @@ jobs:
 
   android-build:
     runs-on: ubuntu-latest
-    needs: [backend, flutter]
     # Companion app: the engine stays on the computer, so the APK contains no Python.
     steps:
       - uses: actions/checkout@v4

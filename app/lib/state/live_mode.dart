@@ -103,7 +103,7 @@ class LiveMode {
       case 'frame':
         await setFrame();
       case 'hello':
-        await _push(); // the floating window just started: give it the live state
+        if (active) await _push(); // the floating window (re)asks for the live state
       case 'fast':
         fast = msg['on'] == true;
         await _push();

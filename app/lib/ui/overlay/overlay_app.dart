@@ -81,8 +81,14 @@ class _OverlayCardState extends State<OverlayCard> {
     widget.send?.call({'cmd': 'hello'});
     final t = widget.ticker;
     if (t != null) {
+      var asks = 0;
       _tick = Timer.periodic(t, (_) {
-        if (mounted && _data['live'] == true && _data['hide'] != true) setState(() {}); // countdowns
+        if (!mounted) return;
+        if (_data['live'] == true) {
+          if (_data['hide'] != true) setState(() {}); // countdowns
+        } else if (++asks <= 30 && asks.isEven) {
+          widget.send?.call({'cmd': 'hello'}); // the first "hello" can be lost while the window starts: ask again
+        }
       });
     }
   }
@@ -97,6 +103,66 @@ class _OverlayCardState extends State<OverlayCard> {
   @override
   Widget build(BuildContext context) {
     if (_data['live'] == true) return _live(context);
+    return LayoutBuilder(builder: (context, c) => c.maxHeight < 260 ? _compactIdle() : _idle());
+  }
+
+  /// The starting card in the low strip window: one row.
+  Widget _compactIdle() {
+    final lang = _data['lang'] as String? ?? 'ar';
+    String t(String k) => tr(lang, k);
+    final sig = _data['signal'] as String? ?? 'WAIT';
+    final color = _sideColor(sig);
+    return Directionality(
+      textDirection: lang == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Card(
+        color: const Color(0xF0111827),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: color, width: 2),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  key: const Key('overlay_signal'),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
+                  child: Text(
+                    t(sig.toLowerCase()),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Text(
+                  _data['state'] == null ? t('live_connecting') : t('state_${_data['state']}'),
+                  key: const Key('overlay_state'),
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(width: 14),
+                OutlinedButton.icon(
+                  key: const Key('overlay_hello'),
+                  onPressed: () => widget.send?.call({'cmd': 'hello'}),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: Text(t('live_reconnect'), style: const TextStyle(fontSize: 13)),
+                ),
+                IconButton(
+                  key: const Key('overlay_close'),
+                  icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                  onPressed: widget.onClose,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _idle() {
     final lang = _data['lang'] as String? ?? 'ar';
     String t(String k) => tr(lang, k);
     final sig = _data['signal'] as String? ?? 'WAIT';
