@@ -851,7 +851,7 @@ class _OverlayCardState extends State<OverlayCard> {
         ),
         child: LayoutBuilder(
           builder: (context, c) {
-            if (c.maxWidth >= 560) return _strip(t, sig, color, busy, dur, left, fresh, at, p0, rest, due, target, close);
+            if (c.maxWidth > c.maxHeight * 2) return _strip(t, sig, color, busy, dur, left, fresh, at, p0, rest, due, target, close);
             // narrow: the same sections stacked
             Widget box(Widget child) => Container(
               margin: const EdgeInsets.only(top: 6),

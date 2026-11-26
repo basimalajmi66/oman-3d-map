@@ -200,7 +200,7 @@ void main() {
     await updates.close();
   });
 
-  for (final (name, size) in const [('the low two-row strip (tablet)', Size(1250, 190)), ('the stacked layout (narrow)', Size(560, 1100))]) {
+  for (final (name, size) in const [('the low two-row strip (tablet)', Size(1600, 250)), ('the strip as the tablet really showed it', Size(960, 135)), ('the stacked layout (narrow)', Size(560, 1100))]) {
   testWidgets('$name holds everything at once without overflowing', (tester) async {
     tester.view.physicalSize = size; // the window's pixel size
     tester.view.devicePixelRatio = 2;
