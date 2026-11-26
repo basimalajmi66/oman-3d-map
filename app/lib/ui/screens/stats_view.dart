@@ -123,8 +123,14 @@ class _StatsViewState extends State<StatsView> {
         const SizedBox(height: 8),
         Text(app.t('insights'), style: const TextStyle(fontWeight: FontWeight.bold)),
         Text(app.t('insights_note'), style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
-        ..._insights.map((i) => Padding(
-              key: Key('insight_${i['code']}${i['key'] != null ? '_${i['key']}' : ''}'),
+        ..._insights.asMap().entries.map((e) => (e.key, e.value)).map((p) {
+          final i = p.$2;
+          // keys must be unique: two insights can share code and key (e.g. "losses concentrated" for the same value in
+          // two fields, or "review" for several strategies) — a repeated key crashed this page
+          final base = 'insight_${i['code']}${i['key'] != null ? '_${i['key']}' : ''}';
+          final repeated = _insights.take(p.$1).any((o) => 'insight_${o['code']}${o['key'] != null ? '_${o['key']}' : ''}' == base);
+          return Padding(
+              key: Key(repeated ? '${base}_${p.$1}' : base),
               padding: const EdgeInsets.only(top: 4),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Icon(
@@ -138,7 +144,8 @@ class _StatsViewState extends State<StatsView> {
                 const SizedBox(width: 6),
                 Expanded(child: Text(_insightText(i), style: const TextStyle(fontSize: 12))),
               ]),
-            )),
+            );
+        }),
         for (final k in ['by_strategy', 'by_condition', 'by_asset', 'by_timeframe', 'by_direction', 'by_hour', 'by_confidence', 'by_data_quality'])
           _group(k, list(k)),
         if (list('training_log').isNotEmpty) ...[

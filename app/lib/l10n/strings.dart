@@ -847,6 +847,7 @@ const Map<String, Map<String, String>> _strings = {
   'live_result_saved': {'ar': 'سُجّلت النتيجة', 'en': 'Result saved'},
   'live_candle': {'ar': 'الشمعة', 'en': 'Candle'},
   'live_trade': {'ar': 'الصفقة', 'en': 'Trade'},
+  'live_not_taken': {'ar': 'لم أدخل هذه الصفقة', 'en': 'I did not take this trade'},
   'live_fast': {'ar': 'قراءة سريعة', 'en': 'Fast reading'},
   // knowledge item types / kinds
   'it_note': {'ar': 'ملاحظة', 'en': 'Note'},

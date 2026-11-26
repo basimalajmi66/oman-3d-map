@@ -180,6 +180,30 @@ void main() {
     await updates.close();
   });
 
+  testWidgets('the tall, narrow window holds everything at once without overflowing', (tester) async {
+    tester.view.physicalSize = const Size(560, 1100); // the window's pixel size on the tablet
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    final updates = StreamController<dynamic>();
+    final now = DateTime(2026, 11, 21, 10, 0, 10);
+    await tester.pumpWidget(OverlayApp(updates: updates.stream, onClose: () {}, send: (_) {}, now: () => now));
+    final at = now.millisecondsSinceEpoch;
+    updates.add({
+      'live': true, 'lang': 'ar', 'signal': 'SELL', 'duration_sec': 60, 'timeframe_sec': 30, 'duration_min_sec': 60,
+      'signal_at': at, 'time': '10:00:10', 'quality': 0.91, 'price': 2650.5, 'auto': true, 'fast': true, 'account': 'demo',
+      'reason': '${tr('ar', 'pattern_signal_tag')}: ${tr('ar', 'c_bearish_engulfing')}، ${tr('ar', 'c_resistance_rejection')}',
+      'read_bias': 'down', 'read_head': 'هبوط ↓ · قوية', 'read_step': tr('ar', 'read_sell'), 'read_lines': ['انتبه: دعم قريب عند 2648.7'],
+      'pending': [{'id': 1, 'side': 'BUY', 'expires_at': at - 1000}, {'id': 2, 'side': 'SELL', 'expires_at': at + 50000}],
+    });
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    for (final k in ['overlay_signal', 'overlay_countdown', 'overlay_entry', 'overlay_result', 'overlay_read', 'overlay_tf',
+      'overlay_dur', 'overlay_fast', 'overlay_account_demo', 'overlay_analyze', 'overlay_frame', 'overlay_auto']) {
+      expect(find.byKey(Key(k)), findsOneWidget, reason: k);
+    }
+    await updates.close();
+  });
+
   test('"set frame": the trading app is captured (window hidden) and handed to the crop screen', () async {
     final frames = <int>[];
     final l2 = LiveMode(state: state, screen: screen, crop: () async => null, hideDelay: Duration.zero,

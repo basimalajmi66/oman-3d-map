@@ -47,8 +47,9 @@ class AndroidOverlayController implements OverlayController {
 
   @override
   Future<void> show() => FlutterOverlayWindow.showOverlay(
-        height: 600,
-        width: 620,
+        // pixels: a tall, narrow panel (the tablet screen is about 2000 × 1250 px), dragged to either side
+        height: 1100,
+        width: 560,
         alignment: OverlayAlignment.topRight,
         enableDrag: true,
         flag: OverlayFlag.defaultFlag,

@@ -62,6 +62,9 @@ void main() {
           {'code': 'condition_better', 'key': 'trending', 'win_rate': 0.8, 'sample': 10, 'overall': 0.6},
           {'code': 'strategy_review_suggested', 'name': 'Trend buyer', 'live_win_rate': 0.3, 'sample': 30,
             'backtest_win_rate': 0.81},
+          // two insights with the same code and key (losses concentrated on one value in two fields) used to crash the page
+          {'code': 'losses_concentrated', 'field': 'asset', 'key': 'UNKNOWN', 'share': 0.9, 'losses': 9},
+          {'code': 'losses_concentrated', 'field': 'timeframe', 'key': 'UNKNOWN', 'share': 0.9, 'losses': 9},
         ],
         'real': [{'code': 'insufficient_sample', 'sample': 2, 'needed': 10}],
       };
@@ -77,6 +80,8 @@ void main() {
     expect(find.textContaining('80.0%'), findsWidgets);
     expect(find.byKey(const Key('insight_strategy_review_suggested')), findsOneWidget);
     expect(find.text(tr('ar', 'insights_note')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('insight_losses_concentrated_UNKNOWN')), findsOneWidget);
     expect(find.textContaining('Trend buyer v1'), findsOneWidget);
     // switch account: real results are shown on their own
     await tester.tap(find.descendant(of: find.byKey(const Key('stats_account')), matching: find.text(tr('ar', 'real'))));
