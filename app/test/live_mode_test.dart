@@ -139,6 +139,22 @@ void main() {
     expect(e.calls.where((c) => c.startsWith('chart:')).last, isNot(endsWith(':fast')));
   });
 
+  test('quick result buttons: always there — the open trade (even before its time), else the latest signal; none → said so', () async {
+    await live.start();
+    await live.handle({'cmd': 'quick_result', 'outcome': 'win'});
+    expect(o.pushed.last['note'], tr('ar', 'live_no_trade_to_record'));
+    e.analysisExtra = {'signal': 'SELL', 'signal_id': 91, 'recorded': true, 'duration_sec': 120, 'reason_code': 'pattern_signal',
+      'reasons': ['setup: bearish_engulfing']};
+    commands.add({'cmd': 'analyze'});
+    await settle(live);
+    expect(o.pushed.last['quick_target']['id'], 91);
+    await live.handle({'cmd': 'quick_result', 'outcome': 'loss'}); // the trade is still running: recorded anyway
+    expect(e.calls, contains('result_from_signal:91:demo:loss'));
+    expect(o.pushed.last['quick_target'], isNull); // nothing left to record
+    await live.handle({'cmd': 'quick_result', 'outcome': 'win'});
+    expect(e.calls.where((c) => c.startsWith('result_from_signal:')), hasLength(1));
+  });
+
   test('candle length and trade duration chosen in the window go to the settings', () async {
     await live.start();
     await live.handle({'cmd': 'set_tf', 'value': 60});
@@ -180,8 +196,9 @@ void main() {
     await updates.close();
   });
 
-  testWidgets('the tall, narrow window holds everything at once without overflowing', (tester) async {
-    tester.view.physicalSize = const Size(560, 1100); // the window's pixel size on the tablet
+  for (final (name, size) in const [('the low horizontal strip (tablet)', Size(1700, 340)), ('the stacked layout (narrow)', Size(560, 1100))]) {
+  testWidgets('$name holds everything at once without overflowing', (tester) async {
+    tester.view.physicalSize = size; // the window's pixel size
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     final updates = StreamController<dynamic>();
@@ -197,12 +214,13 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    for (final k in ['overlay_signal', 'overlay_countdown', 'overlay_entry', 'overlay_result', 'overlay_read', 'overlay_tf',
-      'overlay_dur', 'overlay_fast', 'overlay_account_demo', 'overlay_analyze', 'overlay_frame', 'overlay_auto']) {
+    for (final k in ['overlay_signal', 'overlay_countdown', 'overlay_entry', 'overlay_result', 'overlay_quick', 'overlay_read',
+      'overlay_tf', 'overlay_dur', 'overlay_fast', 'overlay_account_demo', 'overlay_analyze', 'overlay_frame', 'overlay_auto']) {
       expect(find.byKey(Key(k)), findsOneWidget, reason: k);
     }
     await updates.close();
   });
+  }
 
   test('"set frame": the trading app is captured (window hidden) and handed to the crop screen', () async {
     final frames = <int>[];

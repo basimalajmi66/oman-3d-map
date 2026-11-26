@@ -118,6 +118,14 @@ class LiveMode {
         await _setting({'trade_duration_min_sec': d, if (max < d) 'trade_duration_max_sec': d});
       case 'result':
         await recordResult(msg['id'] as int?, msg['outcome'] as String?);
+      case 'quick_result':
+        final target = quickTarget;
+        if (target == null) {
+          _last = {..._last, 'error': null, 'note': state.t('live_no_trade_to_record')};
+          await _push();
+        } else {
+          await recordResult(target['id'] as int, msg['outcome'] as String?);
+        }
       case 'skip_result':
         pending.removeWhere((p) => p['id'] == msg['id']);
         await _push();
@@ -134,16 +142,31 @@ class LiveMode {
     await _push();
   }
 
+  /// The trade the always-visible quick result buttons record: the oldest open trade (even before its time is up),
+  /// else the latest BUY / SELL signal not recorded yet.
+  Json? get quickTarget {
+    if (pending.isNotEmpty) return pending.first;
+    final l = _lastSignal;
+    if (l != null && !_recordedIds.contains(l['id'])) return l;
+    return null;
+  }
+
+  Json? _lastSignal;
+  final _recordedIds = <int>{};
+
   /// One tap in the floating window: the result of a trade taken from a signal (demo / real as chosen there).
   Future<void> recordResult(int? id, String? outcome) async {
     if (id == null || !const ['win', 'loss', 'draw'].contains(outcome)) return;
     final p = pending.where((x) => x['id'] == id).firstOrNull;
     try {
-      await state.engine.resultFromSignal(id, accountType: account, outcome: outcome!, notes: p?['label'] as String?);
+      final label = p?['label'] ?? (_lastSignal?['id'] == id ? _lastSignal!['label'] : null);
+      await state.engine.resultFromSignal(id, accountType: account, outcome: outcome!, notes: label as String?);
       pending.removeWhere((x) => x['id'] == id);
+      _recordedIds.add(id);
       _last = {..._last, 'error': null, 'note': '${state.t('live_result_saved')}: ${state.t(outcome)}'};
     } on EngineException catch (e) {
       pending.removeWhere((x) => x['id'] == id);
+      _recordedIds.add(id); // e.g. already recorded: do not offer it again
       _last = {..._last, 'error': e.message};
     }
     await _push();
@@ -212,6 +235,7 @@ class LiveMode {
           'id': a['signal_id'], 'side': a['signal'], 'label': _last['reason'],
           'expires_at': _now().millisecondsSinceEpoch + dur * 1000,
         });
+        _lastSignal = {'id': a['signal_id'], 'side': a['signal'], 'label': _last['reason']};
         if (pending.length > 5) pending.removeAt(0);
       }
     } on EngineException catch (e) {
@@ -267,6 +291,7 @@ class LiveMode {
       'fast': fast,
       'account': account,
       'pending': pending,
+      'quick_target': quickTarget,
       'signal': 'WAIT',
       ..._last,
     });

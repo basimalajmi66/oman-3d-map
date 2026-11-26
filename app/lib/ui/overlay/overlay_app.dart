@@ -177,29 +177,9 @@ class _OverlayCardState extends State<OverlayCard> {
     _ => SignalColors.wait,
   };
 
-  /// A section of the tall window: a rounded box with an optional small title.
-  Widget _box({Key? key, String? title, Color? border, required List<Widget> children}) => Container(
-    key: key,
-    margin: const EdgeInsets.only(top: 6),
-    padding: const EdgeInsets.all(8),
-    decoration: BoxDecoration(
-      color: _panel,
-      borderRadius: BorderRadius.circular(10),
-      border: border == null ? null : Border.all(color: border, width: 1.5),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (title != null) Text(title, style: const TextStyle(color: Colors.white54, fontSize: 11)),
-        ...children,
-      ],
-    ),
-  );
-
-  /// Live analysis over the trading app — a tall, narrow window, top to bottom:
-  /// signal → timing (candle countdown, enter now, trade result) → chart reading → candle / trade / fast / account →
-  /// analyse now, frame, auto.
+  /// Live analysis over the trading app. On a wide window (the tablet) a low horizontal strip of sections, side by
+  /// side: signal | timing | quick result | chart reading | candle & trade | actions. On a narrow window the same
+  /// sections stacked.
   Widget _live(BuildContext context) {
     if (_data['hide'] == true) return const SizedBox.shrink(); // not in the screen picture
     final lang = _data['lang'] as String? ?? 'ar';
@@ -212,7 +192,6 @@ class _OverlayCardState extends State<OverlayCard> {
     final dur = _data['duration_sec'];
     final send = widget.send;
 
-    // --- timing
     final tf = (_data['timeframe_sec'] as num?)?.toInt() ?? 30;
     final nowMs = _now().millisecondsSinceEpoch;
     final nowS = nowMs ~/ 1000;
@@ -222,15 +201,20 @@ class _OverlayCardState extends State<OverlayCard> {
     final pend = [for (final p in (_data['pending'] as List? ?? const [])) (p as Map).cast<String, dynamic>()];
     final p0 = pend.isEmpty ? null : pend.first;
     final rest = p0 == null ? 0 : (((p0['expires_at'] as num).toInt() - nowMs) / 1000).ceil();
+    final target = (_data['quick_target'] as Map?)?.cast<String, dynamic>();
 
-    const small = TextStyle(color: Colors.white70, fontSize: 12);
-    const value = TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600);
+    const small = TextStyle(color: Colors.white70, fontSize: 11);
+    const value = TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600);
+
     Widget pick(String key, String label, int v, List<int> options, String cmd) => Row(
       children: [
-        Expanded(child: Text(label, style: small)),
+        Expanded(
+          child: Text(label, style: small, overflow: TextOverflow.ellipsis),
+        ),
         DropdownButton<int>(
           key: Key(key),
           value: options.contains(v) ? v : null,
+          isDense: true,
           dropdownColor: _panel,
           style: value,
           underline: const SizedBox.shrink(),
@@ -246,6 +230,284 @@ class _OverlayCardState extends State<OverlayCard> {
       ],
     );
 
+    // ---------------- sections
+    final signal = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          key: const Key('overlay_signal'),
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
+          child: Column(
+            children: [
+              Text(
+                t(sig.toLowerCase()),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+              ),
+              if (sig != 'WAIT' && dur != null)
+                Text('${t('live_trade')}: $dur${t('seconds')}', style: const TextStyle(color: Colors.white, fontSize: 12)),
+            ],
+          ),
+        ),
+        if (_data['error'] != null)
+          Text(
+            '${_data['error']}',
+            key: const Key('overlay_error'),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
+          )
+        else if (_data['reason'] != null)
+          Text(
+            '${_data['reason']}',
+            key: const Key('overlay_reason'),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 11),
+          ),
+        if (_data['note'] != null && _data['error'] == null)
+          Text(
+            '${_data['note']}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 11),
+          ),
+      ],
+    );
+
+    final timing = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(t('live_candle_left'), style: small, textAlign: TextAlign.center),
+        Text(
+          _mmss(left),
+          key: const Key('overlay_countdown'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+        ),
+        if (sig != 'WAIT' && at != null)
+          Text(
+            fresh ? t('live_enter_now') : t('live_entry_passed'),
+            key: const Key('overlay_entry'),
+            maxLines: 2,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: fresh ? Colors.lightGreenAccent : Colors.white54, fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+        if (p0 != null && rest > 0)
+          Text(
+            '${t('live_result_in')}: ${_mmss(rest)}',
+            key: const Key('overlay_result_wait'),
+            style: small,
+            textAlign: TextAlign.center,
+          ),
+      ],
+    );
+
+    // the quick result buttons — always there; they record the open trade (or the latest signal)
+    final due = p0 != null && rest <= 0;
+    final quick = Column(
+      key: const Key('overlay_quick'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          due
+              ? '${t('live_how_did_it_go')} (${t((p0['side'] as String).toLowerCase())})'
+              : target != null
+              ? '${t('live_quick_result')} (${t((target['side'] as String).toLowerCase())})'
+              : t('live_quick_result'),
+          key: due ? const Key('overlay_result') : null,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: due ? Colors.amberAccent : Colors.white70,
+            fontSize: 11,
+            fontWeight: due ? FontWeight.bold : null,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            for (final (o, c) in const [('win', SignalColors.buy), ('loss', SignalColors.sell), ('draw', Colors.blueGrey)])
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: FilledButton(
+                    key: Key('overlay_result_$o'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: c,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      minimumSize: const Size(0, 36),
+                    ),
+                    onPressed: () =>
+                        send?.call(due ? {'cmd': 'result', 'id': p0['id'], 'outcome': o} : {'cmd': 'quick_result', 'outcome': o}),
+                    child: Text(t(o), style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        if (target != null)
+          TextButton(
+            key: const Key('overlay_result_skip'),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 24),
+              visualDensity: VisualDensity.compact,
+            ),
+            onPressed: () => send?.call({'cmd': 'skip_result', 'id': target['id']}),
+            child: Text(t('live_not_taken'), style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          ),
+      ],
+    );
+
+    final reading = Column(
+      key: const Key('overlay_read'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '${t('read_title')}: ${_data['read_head'] ?? '—'}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: _data['read_bias'] == 'up' || _data['read_bias'] == 'down'
+                ? _sideColor(_data['read_bias'] as String?)
+                : Colors.amberAccent,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
+        ),
+        if ('${_data['read_step'] ?? ''}'.isNotEmpty)
+          Text(
+            '${_data['read_step']}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+          ),
+        for (final l in (_data['read_lines'] as List? ?? const []).take(2))
+          Text('• $l', maxLines: 1, overflow: TextOverflow.ellipsis, style: small),
+        if (q != null || price != null)
+          Text(
+            [
+              if (q != null) '${t('data_quality')}: ${(q * 100).round()}%',
+              if (price != null) '${t('live_price')}: $price',
+            ].join(' · '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+          ),
+      ],
+    );
+
+    final settings = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        pick('overlay_tf', t('live_candle'), tf, _timeframes, 'set_tf'),
+        pick('overlay_dur', t('live_trade'), (_data['duration_min_sec'] as num?)?.toInt() ?? 60, _durations, 'set_dur'),
+        Row(
+          children: [
+            for (final a in const ['demo', 'real'])
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: ChoiceChip(
+                    key: Key('overlay_account_$a'),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: EdgeInsets.zero,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+                    label: SizedBox(
+                      width: double.infinity,
+                      child: Text(t(a), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
+                    ),
+                    selected: (_data['account'] ?? 'demo') == a,
+                    onSelected: (_) => send?.call({'cmd': 'account', 'value': a}),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+
+    final actions = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          key: const Key('overlay_analyze'),
+          style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10), minimumSize: const Size(0, 38)),
+          onPressed: busy ? null : () => send?.call({'cmd': 'analyze'}),
+          icon: busy
+              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.center_focus_strong, size: 18),
+          label: Text(t('live_analyze'), overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+        ),
+        Row(
+          children: [
+            IconButton(
+              key: const Key('overlay_frame'),
+              tooltip: t('live_set_frame'),
+              visualDensity: VisualDensity.compact,
+              onPressed: busy ? null : () => send?.call({'cmd': 'frame'}),
+              icon: const Icon(Icons.crop, color: Colors.white70, size: 20),
+            ),
+            Expanded(
+              child: Text(t('live_auto'), style: small, textAlign: TextAlign.end, overflow: TextOverflow.ellipsis),
+            ),
+            Transform.scale(
+              scale: 0.8,
+              child: Switch(
+                key: const Key('overlay_auto'),
+                value: _data['auto'] == true,
+                onChanged: (v) => send?.call({'cmd': 'auto', 'on': v}),
+              ),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(t('live_fast'), style: small, textAlign: TextAlign.end, overflow: TextOverflow.ellipsis),
+            ),
+            Transform.scale(
+              scale: 0.8,
+              child: Switch(
+                key: const Key('overlay_fast'),
+                value: _data['fast'] != false,
+                onChanged: (v) => send?.call({'cmd': 'fast', 'on': v}),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final close = IconButton(
+      key: const Key('overlay_close'),
+      visualDensity: VisualDensity.compact,
+      icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+      onPressed: () {
+        send?.call({'cmd': 'stop'});
+        widget.onClose();
+      },
+    );
+
+    Widget cell(Widget child, {int flex = 3}) => Expanded(
+      flex: flex,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(10)),
+        child: child,
+      ),
+    );
+
     return Directionality(
       textDirection: lang == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Card(
@@ -254,254 +516,76 @@ class _OverlayCardState extends State<OverlayCard> {
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(color: color, width: 2),
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ---------------- the signal
-              Row(
+        child: LayoutBuilder(
+          builder: (context, c) {
+            if (c.maxWidth >= 560) {
+              // the strip: one low row
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(5),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      cell(signal),
+                      cell(timing, flex: 2),
+                      cell(quick, flex: 4),
+                      cell(reading, flex: 3),
+                      cell(settings, flex: 3),
+                      cell(actions, flex: 3),
+                      Column(
+                        children: [
+                          close,
+                          const Spacer(),
+                          Text(
+                            _data['time'] != null ? '${_data['time']}' : '',
+                            style: const TextStyle(color: Colors.white38, fontSize: 9),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            // narrow: the same sections stacked
+            Widget box(Widget child) => Container(
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(10)),
+              child: child,
+            );
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Row(
+                    children: [
+                      Text(
+                        _data['time'] != null ? '${_data['time']}' : '',
+                        style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
+                      const Spacer(),
+                      close,
+                    ],
+                  ),
+                  signal,
+                  box(timing),
+                  box(quick),
+                  box(reading),
+                  box(settings),
+                  const SizedBox(height: 6),
+                  actions,
                   Text(
-                    _data['time'] != null ? '${_data['time']}' : '',
-                    style: const TextStyle(color: Colors.white54, fontSize: 11),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    key: const Key('overlay_close'),
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.close, color: Colors.white70, size: 20),
-                    onPressed: () {
-                      send?.call({'cmd': 'stop'});
-                      widget.onClose();
-                    },
-                  ),
-                ],
-              ),
-              Container(
-                key: const Key('overlay_signal'),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
-                child: Column(
-                  children: [
-                    Text(
-                      t(sig.toLowerCase()),
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
-                    ),
-                    if (sig != 'WAIT' && dur != null)
-                      Text('${t('live_trade')}: $dur${t('seconds')}', style: const TextStyle(color: Colors.white, fontSize: 13)),
-                  ],
-                ),
-              ),
-              if (_data['error'] != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '${_data['error']}',
-                    key: const Key('overlay_error'),
-                    style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
-                  ),
-                )
-              else if (_data['reason'] != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '${_data['reason']}',
-                    key: const Key('overlay_reason'),
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
+                    t('manual_only'),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  ),
-                ),
-              if (_data['note'] != null && _data['error'] == null)
-                Text(
-                  '${_data['note']}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 12),
-                ),
-
-              // ---------------- timing
-              _box(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: Text(t('live_candle_left'), style: small)),
-                      Text(
-                        _mmss(left),
-                        key: const Key('overlay_countdown'),
-                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  if (sig != 'WAIT' && at != null)
-                    Text(
-                      fresh ? '${t('live_enter_now')} — ${t('live_left')} ${_mmss(left)}' : t('live_entry_passed'),
-                      key: const Key('overlay_entry'),
-                      style: TextStyle(
-                        color: fresh ? Colors.lightGreenAccent : Colors.white54,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  if (p0 != null && rest > 0)
-                    Text(
-                      '${t('live_result_in')} (${t((p0['side'] as String).toLowerCase())}): ${_mmss(rest)}',
-                      key: const Key('overlay_result_wait'),
-                      style: small,
-                    ),
-                ],
-              ),
-              if (p0 != null && rest <= 0)
-                _box(
-                  key: const Key('overlay_result'),
-                  border: Colors.amberAccent,
-                  title: '${t('live_how_did_it_go')} (${t((p0['side'] as String).toLowerCase())})',
-                  children: [
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        for (final (o, c) in const [
-                          ('win', SignalColors.buy),
-                          ('loss', SignalColors.sell),
-                          ('draw', Colors.blueGrey),
-                        ])
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
-                              child: FilledButton(
-                                key: Key('overlay_result_$o'),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: c,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                ),
-                                onPressed: () => send?.call({'cmd': 'result', 'id': p0['id'], 'outcome': o}),
-                                child: Text(t(o), style: const TextStyle(fontSize: 13)),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    TextButton(
-                      key: const Key('overlay_result_skip'),
-                      onPressed: () => send?.call({'cmd': 'skip_result', 'id': p0['id']}),
-                      child: Text(t('live_not_taken'), style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                    ),
-                  ],
-                ),
-
-              // ---------------- the chart reading
-              if (_data['read_head'] != null && _data['error'] == null)
-                _box(
-                  key: const Key('overlay_read'),
-                  border: _sideColor(_data['read_bias'] as String?),
-                  children: [
-                    Text(
-                      '${t('read_title')}: ${_data['read_head']}',
-                      style: TextStyle(
-                        color: _data['read_bias'] == 'up' || _data['read_bias'] == 'down'
-                            ? _sideColor(_data['read_bias'] as String?)
-                            : Colors.amberAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                    if ('${_data['read_step'] ?? ''}'.isNotEmpty)
-                      Text(
-                        '${_data['read_step']}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    for (final l in (_data['read_lines'] as List? ?? const [])) Text('• $l', style: small),
-                  ],
-                ),
-              if (q != null || price != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    [
-                      if (q != null) '${t('data_quality')}: ${(q * 100).round()}%',
-                      if (price != null) '${t('live_price')}: $price',
-                    ].join('  ·  '),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white54, fontSize: 11),
-                  ),
-                ),
-
-              // ---------------- settings: candle / trade / fast / account
-              _box(
-                children: [
-                  pick('overlay_tf', t('live_candle'), tf, _timeframes, 'set_tf'),
-                  pick('overlay_dur', t('live_trade'), (_data['duration_min_sec'] as num?)?.toInt() ?? 60, _durations, 'set_dur'),
-                  Row(
-                    children: [
-                      Expanded(child: Text(t('live_fast'), style: small)),
-                      Switch(
-                        key: const Key('overlay_fast'),
-                        value: _data['fast'] != false,
-                        onChanged: (v) => send?.call({'cmd': 'fast', 'on': v}),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      for (final a in const ['demo', 'real'])
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 2),
-                            child: ChoiceChip(
-                              key: Key('overlay_account_$a'),
-                              label: SizedBox(
-                                width: double.infinity,
-                                child: Text(t(a), textAlign: TextAlign.center),
-                              ),
-                              selected: (_data['account'] ?? 'demo') == a,
-                              onSelected: (_) => send?.call({'cmd': 'account', 'value': a}),
-                            ),
-                          ),
-                        ),
-                    ],
+                    style: const TextStyle(color: Colors.white38, fontSize: 10),
                   ),
                 ],
               ),
-
-              // ---------------- actions
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                key: const Key('overlay_analyze'),
-                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                onPressed: busy ? null : () => send?.call({'cmd': 'analyze'}),
-                icon: busy
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.center_focus_strong, size: 20),
-                label: Text(t('live_analyze'), style: const TextStyle(fontSize: 15)),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      key: const Key('overlay_frame'),
-                      onPressed: busy ? null : () => send?.call({'cmd': 'frame'}),
-                      icon: const Icon(Icons.crop, size: 18),
-                      label: Text(t('live_set_frame'), overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(t('live_auto'), style: small),
-                  Switch(
-                    key: const Key('overlay_auto'),
-                    value: _data['auto'] == true,
-                    onChanged: (v) => send?.call({'cmd': 'auto', 'on': v}),
-                  ),
-                ],
-              ),
-              Text(
-                t('manual_only'),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white38, fontSize: 10),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
