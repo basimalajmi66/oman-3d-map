@@ -115,7 +115,7 @@ class _OverlayCardState extends State<OverlayCard> {
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(color: color, width: 2),
         ),
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(10),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -176,6 +176,283 @@ class _OverlayCardState extends State<OverlayCard> {
     'SELL' || 'down' => SignalColors.sell,
     _ => SignalColors.wait,
   };
+
+  /// The strip on a wide screen: two tidy rows, each scaled down rather than overflowing.
+  ///   row 1: signal │ candle countdown (+ enter now) │ win · loss · draw │ analyse now │ auto │ ✕
+  ///   row 2: reason / chart reading │ candle ▾ │ trade ▾ │ demo · real │ fast │ frame
+  Widget _strip(
+    String Function(String) t,
+    String sig,
+    Color color,
+    bool busy,
+    Object? dur,
+    int left,
+    bool fresh,
+    int? at,
+    Map<String, dynamic>? p0,
+    int rest,
+    bool due,
+    Map<String, dynamic>? target,
+    Widget close,
+  ) {
+    final send = widget.send;
+    const small = TextStyle(color: Colors.white70, fontSize: 12);
+    const value = TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600);
+    Widget gap([double w = 10]) => SizedBox(width: w);
+    Widget sep() => Container(width: 1, height: 30, margin: const EdgeInsets.symmetric(horizontal: 8), color: Colors.white24);
+
+    Widget pick(String key, String label, int v, List<int> options, String cmd) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$label ', style: small),
+        DropdownButton<int>(
+          key: Key(key),
+          value: options.contains(v) ? v : null,
+          isDense: true,
+          dropdownColor: _panel,
+          style: value,
+          underline: const SizedBox.shrink(),
+          items: [
+            for (final o in options)
+              DropdownMenuItem(
+                value: o,
+                child: Text('$o${t('seconds')}', style: value),
+              ),
+          ],
+          onChanged: (x) => x == null ? null : send?.call({'cmd': cmd, 'value': x}),
+        ),
+      ],
+    );
+
+    Widget seg(String a) {
+      final on = (_data['account'] ?? 'demo') == a;
+      return InkWell(
+        key: Key('overlay_account_$a'),
+        onTap: () => send?.call({'cmd': 'account', 'value': a}),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: on ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.white38),
+          ),
+          child: Text(
+            t(a),
+            style: TextStyle(fontSize: 12, color: on ? Colors.black : Colors.white70, fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
+    }
+
+    final running = p0 != null && rest > 0 && !due;
+    final quickTitle = due
+        ? '${t('live_how_did_it_go')} (${t((p0!['side'] as String).toLowerCase())})'
+        : target != null
+        ? '${t('live_quick_result')} (${t((target['side'] as String).toLowerCase())})'
+              '${running ? ' · ${t('live_result_in')} ${_mmss(rest)}' : ''}'
+        : t('live_quick_result');
+
+    final row1 = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // the signal
+        Container(
+          key: const Key('overlay_signal'),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
+          child: Text(
+            sig != 'WAIT' && dur != null ? '${t(sig.toLowerCase())} · $dur${t('seconds')}' : t(sig.toLowerCase()),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+        ),
+        sep(),
+        // the candle countdown and the entry window
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _mmss(left),
+              key: const Key('overlay_countdown'),
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            if (sig != 'WAIT' && at != null)
+              Text(
+                fresh ? t('live_enter_now') : t('live_entry_passed_short'),
+                key: const Key('overlay_entry'),
+                style: TextStyle(
+                  color: fresh ? Colors.lightGreenAccent : Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+          ],
+        ),
+        sep(),
+        // the quick result
+        Column(
+          key: const Key('overlay_quick'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              quickTitle,
+              key: due
+                  ? const Key('overlay_result')
+                  : running
+                  ? const Key('overlay_result_wait')
+                  : null,
+              style: TextStyle(
+                color: due ? Colors.amberAccent : Colors.white60,
+                fontSize: 11,
+                fontWeight: due ? FontWeight.bold : null,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (o, c) in const [
+                  ('win', SignalColors.buy),
+                  ('loss', SignalColors.sell),
+                  ('draw', Colors.blueGrey),
+                ]) ...[
+                  FilledButton(
+                    key: Key('overlay_result_$o'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: c,
+                      minimumSize: const Size(64, 34),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => send?.call(
+                      due ? {'cmd': 'result', 'id': p0!['id'], 'outcome': o} : {'cmd': 'quick_result', 'outcome': o},
+                    ),
+                    child: Text(t(o), style: const TextStyle(fontSize: 13)),
+                  ),
+                  gap(4),
+                ],
+                if (target != null)
+                  IconButton(
+                    key: const Key('overlay_result_skip'),
+                    tooltip: t('live_not_taken'),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => send?.call({'cmd': 'skip_result', 'id': target['id']}),
+                    icon: const Icon(Icons.block, size: 18, color: Colors.white54),
+                  ),
+              ],
+            ),
+          ],
+        ),
+        sep(),
+        // actions
+        FilledButton.icon(
+          key: const Key('overlay_analyze'),
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 38), padding: const EdgeInsets.symmetric(horizontal: 14)),
+          onPressed: busy ? null : () => send?.call({'cmd': 'analyze'}),
+          icon: busy
+              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.center_focus_strong, size: 18),
+          label: Text(t('live_analyze'), style: const TextStyle(fontSize: 14)),
+        ),
+        gap(6),
+        Text(t('live_auto'), style: small),
+        Switch(
+          key: const Key('overlay_auto'),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          value: _data['auto'] == true,
+          onChanged: (v) => send?.call({'cmd': 'auto', 'on': v}),
+        ),
+        close,
+      ],
+    );
+
+    final info = _data['error'] != null
+        ? Text(
+            '${_data['error']}',
+            key: const Key('overlay_error'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+          )
+        : _data['note'] != null
+        ? Text(
+            '${_data['note']}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 12),
+          )
+        : _data['reason'] != null && sig != 'WAIT'
+        ? Text(
+            '${_data['reason']}',
+            key: const Key('overlay_reason'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          )
+        : Text(
+            '${t('read_title')}: ${_data['read_head'] ?? '—'}${'${_data['read_step'] ?? ''}'.isNotEmpty ? ' — ${_data['read_step']}' : ''}'
+            '${(_data['read_lines'] as List? ?? const []).isNotEmpty ? ' • ${(_data['read_lines'] as List).first}' : ''}',
+            key: const Key('overlay_read'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _data['read_bias'] == 'up' || _data['read_bias'] == 'down'
+                  ? _sideColor(_data['read_bias'] as String?)
+                  : Colors.amberAccent,
+            ),
+          );
+
+    final row2 = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(width: 380, child: info),
+        if (_data['price'] != null) ...[
+          sep(),
+          Text('${t('live_price')}: ${_data['price']}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        ],
+        sep(),
+        pick('overlay_tf', t('live_candle'), (_data['timeframe_sec'] as num?)?.toInt() ?? 30, _timeframes, 'set_tf'),
+        gap(),
+        pick('overlay_dur', t('live_trade'), (_data['duration_min_sec'] as num?)?.toInt() ?? 60, _durations, 'set_dur'),
+        sep(),
+        seg('demo'),
+        gap(4),
+        seg('real'),
+        sep(),
+        Text(t('live_fast'), style: small),
+        Switch(
+          key: const Key('overlay_fast'),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          value: _data['fast'] != false,
+          onChanged: (v) => send?.call({'cmd': 'fast', 'on': v}),
+        ),
+        IconButton(
+          key: const Key('overlay_frame'),
+          tooltip: t('live_set_frame'),
+          visualDensity: VisualDensity.compact,
+          onPressed: busy ? null : () => send?.call({'cmd': 'frame'}),
+          icon: const Icon(Icons.crop, color: Colors.white70, size: 20),
+        ),
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Flexible(
+            child: FittedBox(fit: BoxFit.scaleDown, child: row1),
+          ),
+          const Divider(height: 6, color: Colors.white12),
+          Flexible(
+            child: FittedBox(fit: BoxFit.scaleDown, child: row2),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// Live analysis over the trading app. On a wide window (the tablet) a low horizontal strip of sections, side by
   /// side: signal | timing | quick result | chart reading | candle & trade | actions. On a narrow window the same
@@ -498,16 +775,6 @@ class _OverlayCardState extends State<OverlayCard> {
       },
     );
 
-    Widget cell(Widget child, {int flex = 3}) => Expanded(
-      flex: flex,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 3),
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(10)),
-        child: child,
-      ),
-    );
-
     return Directionality(
       textDirection: lang == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Card(
@@ -518,35 +785,7 @@ class _OverlayCardState extends State<OverlayCard> {
         ),
         child: LayoutBuilder(
           builder: (context, c) {
-            if (c.maxWidth >= 560) {
-              // the strip: one low row
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(5),
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      cell(signal),
-                      cell(timing, flex: 2),
-                      cell(quick, flex: 4),
-                      cell(reading, flex: 3),
-                      cell(settings, flex: 3),
-                      cell(actions, flex: 3),
-                      Column(
-                        children: [
-                          close,
-                          const Spacer(),
-                          Text(
-                            _data['time'] != null ? '${_data['time']}' : '',
-                            style: const TextStyle(color: Colors.white38, fontSize: 9),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
+            if (c.maxWidth >= 560) return _strip(t, sig, color, busy, dur, left, fresh, at, p0, rest, due, target, close);
             // narrow: the same sections stacked
             Widget box(Widget child) => Container(
               margin: const EdgeInsets.only(top: 6),

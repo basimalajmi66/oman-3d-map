@@ -183,7 +183,11 @@ void main() {
     updates.add({'live': true, 'lang': 'ar', 'signal': 'BUY', 'duration_sec': 60, 'timeframe_sec': 30, 'duration_min_sec': 60,
       'signal_at': at, 'pending': [{'id': 5, 'side': 'BUY', 'expires_at': at + 60000}]});
     await tester.pumpAndSettle();
-    expect(find.text(tr('ar', 'live_entry_passed')), findsOneWidget);
+    expect(find.byKey(const Key('overlay_entry')), findsOneWidget);
+    expect(
+        find.text(tr('ar', 'live_entry_passed')).evaluate().isNotEmpty ||
+            find.text(tr('ar', 'live_entry_passed_short')).evaluate().isNotEmpty,
+        isTrue);
     await tester.tap(find.byKey(const Key('overlay_result_loss')));
     await tester.tap(find.byKey(const Key('overlay_tf')));
     await tester.pumpAndSettle();
@@ -196,7 +200,7 @@ void main() {
     await updates.close();
   });
 
-  for (final (name, size) in const [('the low horizontal strip (tablet)', Size(1700, 340)), ('the stacked layout (narrow)', Size(560, 1100))]) {
+  for (final (name, size) in const [('the low two-row strip (tablet)', Size(1250, 190)), ('the stacked layout (narrow)', Size(560, 1100))]) {
   testWidgets('$name holds everything at once without overflowing', (tester) async {
     tester.view.physicalSize = size; // the window's pixel size
     tester.view.devicePixelRatio = 2;
@@ -214,7 +218,10 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    for (final k in ['overlay_signal', 'overlay_countdown', 'overlay_entry', 'overlay_result', 'overlay_quick', 'overlay_read',
+    // the strip shows the signal's reason in place of the chart reading; the stacked layout shows both
+    expect(find.byKey(const Key('overlay_read')).evaluate().isNotEmpty || find.byKey(const Key('overlay_reason')).evaluate().isNotEmpty,
+        isTrue);
+    for (final k in ['overlay_signal', 'overlay_countdown', 'overlay_entry', 'overlay_result', 'overlay_quick',
       'overlay_tf', 'overlay_dur', 'overlay_fast', 'overlay_account_demo', 'overlay_analyze', 'overlay_frame', 'overlay_auto']) {
       expect(find.byKey(Key(k)), findsOneWidget, reason: k);
     }
@@ -256,7 +263,7 @@ void main() {
     await tester.pumpWidget(OverlayApp(updates: updates.stream, onClose: () {}, send: sent.add));
     updates.add({'live': true, 'lang': 'ar', 'signal': 'BUY', 'duration_sec': 60, 'reason': 'سبب', 'quality': 0.9, 'price': 3567.95, 'auto': false});
     await tester.pumpAndSettle();
-    expect(find.text(tr('ar', 'buy')), findsOneWidget);
+    expect(find.textContaining(tr('ar', 'buy')), findsWidgets);
     expect(find.textContaining('3567.95'), findsOneWidget);
     await tester.tap(find.byKey(const Key('overlay_analyze')));
     await tester.tap(find.byKey(const Key('overlay_auto')));
@@ -267,7 +274,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('overlay_read')), findsOneWidget);
     expect(find.textContaining('صعود ↑ · قوية'), findsOneWidget);
-    expect(find.text(tr('ar', 'read_buy')), findsOneWidget);
+    expect(find.textContaining(tr('ar', 'read_buy')), findsOneWidget);
     expect(find.textContaining('3570.5'), findsOneWidget);
     updates.add({'live': true, 'hide': true});
     await tester.pumpAndSettle();
