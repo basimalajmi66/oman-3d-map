@@ -189,13 +189,14 @@ void main() {
             find.text(tr('ar', 'live_entry_passed_short')).evaluate().isNotEmpty,
         isTrue);
     await tester.tap(find.byKey(const Key('overlay_result_loss')));
-    await tester.tap(find.byKey(const Key('overlay_tf')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('60${tr('ar', 'seconds')}').last);
+    // candle 30 s and trade 60 s: + / − step through the choices (no drop-down list that the small window cuts off)
+    await tester.tap(find.byKey(const Key('overlay_tf_plus')));
+    await tester.tap(find.byKey(const Key('overlay_dur_minus')));
     await tester.pumpAndSettle();
     expect(sent, containsAll([
       {'cmd': 'result', 'id': 5, 'outcome': 'loss'},
       {'cmd': 'set_tf', 'value': 60},
+      {'cmd': 'set_dur', 'value': 30},
     ]));
     await updates.close();
   });

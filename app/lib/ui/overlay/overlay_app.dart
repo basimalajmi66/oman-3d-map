@@ -231,6 +231,47 @@ class _OverlayCardState extends State<OverlayCard> {
     );
   }
 
+  /// Candle length / trade duration: − value + buttons. A drop-down list opened inside the low floating window
+  /// and was cut off, so nothing below the first item could be chosen.
+  Widget _stepper(String Function(String) t, String key, String label, int v, List<int> options, String cmd) {
+    final idx = options.indexOf(v);
+    void go(int d) {
+      final n = idx < 0 ? options.indexWhere((o) => o >= v) : idx + d;
+      final j = (n < 0 ? options.length - 1 : n).clamp(0, options.length - 1);
+      if (options[j] != v) widget.send?.call({'cmd': cmd, 'value': options[j]});
+    }
+
+    Widget btn(String k, IconData icon, int d, bool enabled) => InkWell(
+      key: Key(k),
+      onTap: enabled ? () => go(d) : null,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white38),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(icon, size: 16, color: enabled ? Colors.white : Colors.white24),
+      ),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$label ', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        btn('${key}_minus', Icons.remove, -1, idx != 0),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Text(
+            '$v${t('seconds')}',
+            key: Key(key),
+            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ),
+        btn('${key}_plus', Icons.add, 1, idx != options.length - 1),
+      ],
+    );
+  }
+
   String _mmss(int sec) => '${sec ~/ 60}:${(sec % 60).toString().padLeft(2, '0')}';
 
   static const _timeframes = [5, 10, 15, 30, 60, 120, 180, 300];
@@ -263,32 +304,10 @@ class _OverlayCardState extends State<OverlayCard> {
   ) {
     final send = widget.send;
     const small = TextStyle(color: Colors.white70, fontSize: 12);
-    const value = TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600);
     Widget gap([double w = 10]) => SizedBox(width: w);
     Widget sep() => Container(width: 1, height: 30, margin: const EdgeInsets.symmetric(horizontal: 8), color: Colors.white24);
 
-    Widget pick(String key, String label, int v, List<int> options, String cmd) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('$label ', style: small),
-        DropdownButton<int>(
-          key: Key(key),
-          value: options.contains(v) ? v : null,
-          isDense: true,
-          dropdownColor: _panel,
-          style: value,
-          underline: const SizedBox.shrink(),
-          items: [
-            for (final o in options)
-              DropdownMenuItem(
-                value: o,
-                child: Text('$o${t('seconds')}', style: value),
-              ),
-          ],
-          onChanged: (x) => x == null ? null : send?.call({'cmd': cmd, 'value': x}),
-        ),
-      ],
-    );
+    Widget pick(String key, String label, int v, List<int> options, String cmd) => _stepper(t, key, label, v, options, cmd);
 
     Widget seg(String a) {
       final on = (_data['account'] ?? 'demo') == a;
@@ -547,31 +566,8 @@ class _OverlayCardState extends State<OverlayCard> {
     final target = (_data['quick_target'] as Map?)?.cast<String, dynamic>();
 
     const small = TextStyle(color: Colors.white70, fontSize: 11);
-    const value = TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600);
 
-    Widget pick(String key, String label, int v, List<int> options, String cmd) => Row(
-      children: [
-        Expanded(
-          child: Text(label, style: small, overflow: TextOverflow.ellipsis),
-        ),
-        DropdownButton<int>(
-          key: Key(key),
-          value: options.contains(v) ? v : null,
-          isDense: true,
-          dropdownColor: _panel,
-          style: value,
-          underline: const SizedBox.shrink(),
-          items: [
-            for (final o in options)
-              DropdownMenuItem(
-                value: o,
-                child: Text('$o${t('seconds')}', style: value),
-              ),
-          ],
-          onChanged: (x) => x == null ? null : send?.call({'cmd': cmd, 'value': x}),
-        ),
-      ],
-    );
+    Widget pick(String key, String label, int v, List<int> options, String cmd) => _stepper(t, key, label, v, options, cmd);
 
     // ---------------- sections
     final signal = Column(
@@ -851,7 +847,9 @@ class _OverlayCardState extends State<OverlayCard> {
         ),
         child: LayoutBuilder(
           builder: (context, c) {
-            if (c.maxWidth > c.maxHeight * 2) return _strip(t, sig, color, busy, dur, left, fresh, at, p0, rest, due, target, close);
+            if (c.maxWidth > c.maxHeight * 2) {
+              return _strip(t, sig, color, busy, dur, left, fresh, at, p0, rest, due, target, close);
+            }
             // narrow: the same sections stacked
             Widget box(Widget child) => Container(
               margin: const EdgeInsets.only(top: 6),
